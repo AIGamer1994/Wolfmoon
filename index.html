@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>狼月 Wolf Moon</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* 防止長按選取與雙擊縮放 */
+        * {
+            -webkit-touch-callout: none !important;
+            -webkit-user-select: none !important;
+            user-select: none !important;
+            touch-action: manipulation;
+        }
+
+        /* 隱藏滾動條 */
+        .scrollbar-none::-webkit-scrollbar { display: none; }
+        .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 當前的回合發光動畫 */
+        .turn-active-glow { animation: pulse-glow 1.5s infinite alternate; }
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 5px #10b981, 0 0 12px #10b981; }
+            100% { box-shadow: 0 0 15px #10b981, 0 0 25px #34d399; }
+        }
+
+        /* 手牌選中動畫 */
+        .hand-card {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .hand-card.selected {
+            transform: translateY(-12px) scale(1.04);
+            border-color: #f59e0b;
+            box-shadow: 0 10px 20px rgba(245, 158, 11, 0.4), 0 0 15px rgba(245, 158, 11, 0.6);
+            z-index: 30;
+        }
+
+        /* 打出卡牌動畫 */
+        @keyframes playCardAnim {
+            0% { opacity: 0; transform: scale(0.4) translateY(100px) rotate(-10deg); }
+            60% { opacity: 1; transform: scale(1.1) translateY(-10px) rotate(0deg); }
+            100% { opacity: 1; transform: scale(1) translateY(0) rotate(0deg); }
+        }
+        .animate-card-play { animation: playCardAnim 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+        /* 桌面端外框效果 */
+        @media (min-width: 600px) {
+            .mobile-container {
+                border-left: 1px solid rgba(51, 65, 85, 0.5);
+                border-right: 1px solid rgba(51, 65, 85, 0.5);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+            }
+        }
+
+        .history-scroll {
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+            max-height: 14rem;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 m-0 p-0 overflow-hidden">
+
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // 玩家初始資料
+        const INITIAL_PLAYERS = [
+          { id: 0, name: '你', isAI: false, status: '存活', emoji: '⚔️', seed: 'P0', gradient: 'from-emerald-500 to-teal-300', protected: false, playedCards: [], witchRevived: false },
+          { id: 1, name: '女武神', isAI: true, status: '存活', emoji: '🛡️', seed: 'P1', gradient: 'from-pink-600 to-rose-400', protected: false, playedCards: [], witchRevived: false },
+          { id: 2, name: '暗影', isAI: true, status: '存活', emoji: '💤', seed: 'P2', gradient: 'from-purple-600 to-indigo-400', protected: false, playedCards: [], witchRevived: false },
+          { id: 3, name: '零號機', isAI: true, status: '存活', emoji: '⚡', seed: 'P3', gradient: 'from-blue-600 to-cyan-400', protected: false, playedCards: [], witchRevived: false },
+          { id: 4, name: '狂戰士', isAI: true, status: '存活', emoji: '👑', seed: 'P4', gradient: 'from-amber-600 to-yellow-400', protected: false, playedCards: [], witchRevived: false },
+          { id: 5, name: '毒蛛', isAI: true, status: '存活', emoji: '🧪', seed: 'P5', gradient: 'from-teal-600 to-emerald-400', protected: false, playedCards: [], witchRevived: false },
+        ];
+
+        // 29 張普通角色牌範本 + 1張特殊狼人牌
+        const BASE_CARDS_DEF = [
+          { title: '刺客', desc: '選擇一位玩家，猜其手牌數值 0–10；您有2次猜測機會。猜中使其出局。', value: 0, icon: 'fa-user-secret', category: '數值 0', totalCount: 1, type: 'ASSASSIN' },
+          { title: '乞丐之王', desc: '當牌庫耗盡時，若您手握此牌且有玩家手牌為8或9，您獨享勝利。', value: 0, icon: 'fa-crown', category: '數值 0', totalCount: 1, type: 'PASSIVE' },
+          { title: '村民', desc: '選擇一位玩家，猜其手牌數值 0–10；猜中使其出局。', value: 1, icon: 'fa-person', category: '數值 1', totalCount: 4, type: 'VILLAGER' },
+          { title: '醉漢', desc: '收集所有存活玩家手牌，洗勻後隨機發回每人1張。', value: 1, icon: 'fa-wine-bottle', category: '數值 1', totalCount: 1, type: 'DRUNKARD' },
+          { title: '僕人', desc: '回合結束時可棄掉面前的僕人，立刻進行額外回合。', value: 1, icon: 'fa-bell-concierge', category: '數值 1', totalCount: 1, type: 'SERVANT' },
+          { title: '先知', desc: '秘密檢視一位對手的手牌。', value: 2, icon: 'fa-eye', category: '數值 2', totalCount: 1, type: 'SEER' },
+          { title: '稅務官', desc: '指定一位玩家，若其手牌為 0 或 1，該玩家出局。', value: 2, icon: 'fa-coins', category: '數值 2', totalCount: 1, type: 'TAX_COLLECTOR' },
+          { title: '審判官', desc: '指定一位玩家，若其手牌為 9 或 10，該玩家出局。', value: 2, icon: 'fa-gavel', category: '數值 2', totalCount: 1, type: 'INQUISITOR' },
+          { title: '吸血鬼', desc: '打出時，若您面前已有至少 2 張數值 7 以上的牌，立刻獲勝。', value: 2, icon: 'fa-bat', category: '數值 2', totalCount: 1, type: 'VAMPIRE' },
+          { title: '酒保', desc: '秘密比較自己與一位對手的手牌數值；較小者出局。', value: 3, icon: 'fa-martini-glass', category: '數值 3', totalCount: 1, type: 'BARKEEPER' },
+          { title: '小女孩', desc: '秘密比較自己與一位對手的手牌數值；較大者出局。', value: 3, icon: 'fa-child', category: '數值 3', totalCount: 1, type: 'GIRL' },
+          { title: '商人', desc: '牌庫耗盡時，若您面前有商人，手牌結算數值 +2。', value: 3, icon: 'fa-store', category: '數值 3', totalCount: 1, type: 'PASSIVE' },
+          { title: '守夜人', desc: '拿起中央3張牌，從4張中留1張，其餘3張放回中央。', value: 3, icon: 'fa-binoculars', category: '數值 3', totalCount: 1, type: 'NIGHT_WATCHMAN' },
+          { title: '保鏢', desc: '直到您下個回合開始前不受其他玩家牌效影響。', value: 4, icon: 'fa-shield-halved', category: '數值 4', totalCount: 2, type: 'BODYGUARD' },
+          { title: '女巫', desc: '指定一位出局玩家復活抽牌；若該玩家獲勝，您也共同獲勝。', value: 4, icon: 'fa-hat-wizard', category: '數值 4', totalCount: 1, type: 'WITCH' },
+          { title: '科學怪人', desc: '牌庫耗盡時，最終數值為面前最小與最大牌的總和。', value: 4, icon: 'fa-bolt', category: '數值 4', totalCount: 1, type: 'PASSIVE' },
+          { title: '叛徒', desc: '第3張月亮翻開且狼人獲勝時，若您手握叛徒，您也獲勝。', value: 5, icon: 'fa-mask', category: '數值 5', totalCount: 1, type: 'PASSIVE' },
+          { title: '賞金獵人', desc: '指定玩家公開手牌並重抽；若重抽到市長或狼人，該玩家出局。', value: 5, icon: 'fa-crosshairs', category: '數值 5', totalCount: 1, type: 'BOUNTY_HUNTER' },
+          { title: '掘墓人', desc: '從一位玩家面前取一張非狼人牌加入手牌，再打出1張。', value: 6, icon: 'fa-shovel', category: '數值 6', totalCount: 1, type: 'GRAVEDIGGER' },
+          { title: '扒手', desc: '指定兩位對手，互換手牌。', value: 6, icon: 'fa-people-arrows-left-right', category: '數值 6', totalCount: 1, type: 'PICKPOCKET' },
+          { title: '間諜', desc: '若他人猜測您的手牌失敗，可打出間諜使猜測者出局並接手其手牌。', value: 7, icon: 'fa-user-secret', category: '數值 7', totalCount: 1, type: 'SPY' },
+          { title: '小偷', desc: '與一位對手交換手牌，然後立刻進行額外回合。', value: 7, icon: 'fa-mask', category: '數值 7', totalCount: 1, type: 'THIEF' },
+          { title: '陰謀家', desc: '手握此牌被對手牌效淘汰時，該對手也出局。', value: 8, icon: 'fa-chess-knight', category: '數值 8', totalCount: 1, type: 'PASSIVE' },
+          { title: '煉金術士', desc: '因對手牌效出局時，可棄掉面前的煉金術士並抽牌復活。', value: 8, icon: 'fa-flask', category: '數值 8', totalCount: 1, type: 'PASSIVE' },
+          { title: '市長', desc: '打出時立刻出局。', value: 9, icon: 'fa-user-tie', category: '數值 9', totalCount: 1, type: 'MAYOR' },
+        ];
+
+        const WEREWOLF_CARD = { title: '狼人', desc: '打出時立刻出局；若第三張月亮翻開時手握狼人，立刻獲勝。', value: 10, icon: 'fa-paw', category: '數值 10', totalCount: 1, type: 'WEREWOLF' };
+
+        const MOON_CARDS = [
+          { title: '孤狼月亮牌', isMoon: true, level: 1, desc: '第1張月亮牌。翻開後面朝上放在桌面，翻開者繼續抽下一張牌。' },
+          { title: '嘯狼月亮牌', isMoon: true, level: 2, desc: '第2張月亮牌。翻開後面朝上放在桌面，翻開者繼續抽下一張牌。' },
+          { title: '狼人月亮牌', isMoon: true, level: 3, desc: '第3張月亮牌。手握狼人者立刻獲勝！' },
+        ];
+
+        function App() {
+          const [version] = useState('v0.0.3 M');
+
+          // 全局遊戲狀態
+          const [players, setPlayers] = useState(INITIAL_PLAYERS);
+          const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
+
+          // 雙行動態廣播狀態 (Line 1: 動作簡報, Line 2: 最終結果)
+          const [broadcastAction, setBroadcastAction] = useState('狼月降臨！準備開啟遊戲');
+          const [broadcastResult, setBroadcastResult] = useState('輪到你的回合');
+
+          const [moonPhase, setMoonPhase] = useState(0);
+          const [gameOver, setGameOver] = useState(false);
+          const [winnerInfo, setWinnerInfo] = useState(null);
+          const [wins, setWins] = useState({}); // 勝場月亮標記（跨局累計）
+
+          // 牌庫、備用牌、手牌、中央牌
+          const [deck, setDeck] = useState([]);
+          const [reserveCards, setReserveCards] = useState([]);
+          const [playerHands, setPlayerHands] = useState({});
+          const [centerCards, setCenterCards] = useState([]);
+          const [playedCardArena, setPlayedCardArena] = useState(null);
+          const [historyLogs, setHistoryLogs] = useState([]);
+          const [witchTargetOwner, setWitchTargetOwner] = useState(null);
+
+          const [selectedHandCard, setSelectedHandCard] = useState(null);
+
+          // 彈窗與互動介面狀態
+          const [isDeckModalOpen, setIsDeckModalOpen] = useState(false);
+          const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+          const [isCenterCardsModalOpen, setIsCenterCardsModalOpen] = useState(false);
+
+          // 互動能力彈窗
+          const [interactionModal, setInteractionModal] = useState(null);
+          const [isReturningCenterCard, setIsReturningCenterCard] = useState(false);
+          const [extraTurnPlayerId, setExtraTurnPlayerId] = useState(null);
+          const [turnTick, setTurnTick] = useState(0);
+          const [actionLocked, setActionLocked] = useState(false);
+          const lockRef = useRef(false);
+          const [aiPaused, setAiPaused] = useState(false);
+          const pausedRef = useRef(false);
+          const pendingAiRef = useRef(false);
+          const aiRunRef = useRef(0);
+          const winsRef = useRef({});
+          const takenCardRef = useRef(null);
+          const [viewPlayerId, setViewPlayerId] = useState(null);
+          const gameOverRef = useRef(false);
+          const resolveRef = useRef(null);
+          const stateRef = useRef({});
+          stateRef.current = { players, playerHands, deck, reserveCards, centerCards, moonPhase, extraTurnPlayerId, currentTurnIndex, witchTargetOwner };
+
+          // 洗牌算法
+          const shuffle = (array) => {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+          };
+
+          // 統一更新廣播與紀錄
+          const logActionAndResult = (actionText, resultText, playerName = '系統') => {
+            setBroadcastAction(actionText);
+            setBroadcastResult(`➔ ${resultText}`);
+            setHistoryLogs(prev => [
+              { id: `${Date.now()}-${Math.random()}`, player: playerName, card: `${actionText} ➔ ${resultText}` },
+              ...prev
+            ]);
+          };
+
+          // 玩家（人類）換到新手牌時，列出取得的牌（僅限自己；AI 取得的牌不公開）
+          const gotCardsText = (hand) => {
+            const cs = (hand || []).filter(Boolean);
+            return cs.length ? `｜你 取得 ${cs.map(c => `(${c.value})【${c.title}】`).join('、')}` : '';
+          };
+
+          // 按照規則初始化準備遊戲（三層牌庫結構）
+          const initGame = () => {
+            let base29 = [];
+            let idCounter = 0;
+            BASE_CARDS_DEF.forEach(c => {
+              for (let i = 0; i < c.totalCount; i++) {
+                base29.push({ ...c, id: `card-${idCounter++}-${Math.random().toString(36).substr(2, 4)}` });
+              }
+            });
+            base29 = shuffle(base29);
+
+            const hands = {};
+            INITIAL_PLAYERS.forEach(p => {
+              hands[p.id] = [base29.pop()];
+            });
+
+            const reserves = [base29.pop(), base29.pop()];
+            const center = [base29.pop(), base29.pop(), base29.pop()];
+
+            const chunkSize = Math.floor(base29.length / 3);
+            let bottomTier = base29.slice(0, chunkSize);
+            let middleTier = base29.slice(chunkSize, chunkSize * 2);
+            let topTier = base29.slice(chunkSize * 2);
+
+            const wolfMoon = { ...MOON_CARDS[2], id: `moon-3-${Math.random().toString(36).substr(2, 4)}` };
+            const howlMoon = { ...MOON_CARDS[1], id: `moon-2-${Math.random().toString(36).substr(2, 4)}` };
+            const loneMoon = { ...MOON_CARDS[0], id: `moon-1-${Math.random().toString(36).substr(2, 4)}` };
+
+            bottomTier = shuffle([...bottomTier, wolfMoon]);
+            const werewolfCard = { ...WEREWOLF_CARD, id: `werewolf-${Math.random().toString(36).substr(2, 4)}` };
+            // 狼人角色牌改洗入上層（見下方）
+
+            middleTier = shuffle([...middleTier, howlMoon]);
+            // 牌庫以陣列尾端為頂（pop 抽牌），陣列最前面 = 該層最底。
+            // 上層：6 張普通牌 + 狼人洗勻，孤狼月亮放在上層最底 ➔ 狼人必在第 1 張月亮之前出現
+            topTier = [loneMoon, ...shuffle([...topTier, werewolfCard])];
+
+            const finalDeck = [...bottomTier, ...middleTier, ...topTier];
+
+            setDeck(finalDeck);
+            setReserveCards(reserves);
+            setCenterCards(center);
+            setPlayerHands(hands);
+            setPlayers(INITIAL_PLAYERS.map(p => ({ ...p, status: '存活', protected: false, playedCards: [], witchRevived: false })));
+            setCurrentTurnIndex(0);
+            setMoonPhase(0);
+            setGameOver(false);
+            setWinnerInfo(null);
+            gameOverRef.current = false;
+            lockRef.current = false;
+            setActionLocked(false);
+            setPlayedCardArena(null);
+            setWitchTargetOwner(null);
+            setIsReturningCenterCard(false);
+            setExtraTurnPlayerId(null);
+            
+            setBroadcastAction('《狼月》牌庫準備完畢！');
+            setBroadcastResult('➔ 狼人已潛伏在牌庫頂層');
+            setHistoryLogs([{ id: Date.now(), player: '系統', card: '《狼月》牌庫準備完畢！狼人已潛伏在頂層。' }]);
+          };
+
+          useEffect(() => {
+            initGame();
+          }, []);
+
+          // 全部角色牌參考清單
+          const ALL_CARDS = useMemo(() => [...BASE_CARDS_DEF, WEREWOLF_CARD], []);
+
+          // 各卡牌剩餘統計
+          const remainingCounts = useMemo(() => {
+            const counts = {};
+            ALL_CARDS.forEach(c => counts[c.title] = { current: c.totalCount, total: c.totalCount });
+            
+            let activeCards = [...deck, ...reserveCards, ...centerCards];
+            Object.values(playerHands).forEach(h => { if(Array.isArray(h)) activeCards.push(...h); });
+
+            ALL_CARDS.forEach(c => {
+              const inGameCount = activeCards.filter(card => card && card.title === c.title).length;
+              counts[c.title].current = inGameCount;
+            });
+
+            return counts;
+          }, [deck, reserveCards, centerCards, playerHands, ALL_CARDS]);
+
+          const getNextAliveIndex = (fromIndex, pList = players) => {
+            let nextIdx = (fromIndex + 1) % pList.length;
+            let attempts = 0;
+            while (pList[nextIdx].status === '出局' && attempts < pList.length) {
+              nextIdx = (nextIdx + 1) % pList.length;
+              attempts++;
+            }
+            return nextIdx;
+          };
+
+          const setHandNow = (id, hand) => {
+            stateRef.current.playerHands = { ...stateRef.current.playerHands, [id]: hand };
+            setPlayerHands(prev => ({ ...prev, [id]: hand }));
+          };
+
+          const eliminatePlayer = (targetId, killerId = null, reason = '牌效出局', keepHand = false) => {
+            const st = stateRef.current;
+            const target = st.players.find(p => p.id === targetId);
+            if (!target || target.status === '出局') return;
+            const targetHand = (st.playerHands[targetId] || []).filter(Boolean);
+
+            if (killerId !== null && killerId !== targetId) {
+              const hasAlchemist = target.playedCards.some(c => c && c.title === '煉金術士');
+              if (hasAlchemist) {
+                const drawn = drawCardForPlayer(targetId, false) || st.reserveCards[0];
+                setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...p.playedCards.filter(c => c && c.title !== '煉金術士'), ...(keepHand ? [] : targetHand)] } : p));
+                setHandNow(targetId, drawn ? [drawn] : []);
+                logActionAndResult(`${target.name} 遭遇淘汰`, `棄掉面前【煉金術士】抽牌復活！`, target.name);
+                return;
+              }
+            }
+
+            setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, status: '出局', protected: false, playedCards: keepHand ? p.playedCards : [...p.playedCards, ...targetHand.filter(c => !p.playedCards.some(x => x && x.id === c.id))] } : p));
+            if (!keepHand) setHandNow(targetId, []);
+            // 不另開一筆紀錄：把「公開手牌」接在剛才那筆牌效結果後面
+            const handText = targetHand.length ? targetHand.map(c => `(${c.value})【${c.title}】`).join('、') : '無';
+            const revealSuffix = `｜${target.name} 公開手牌：${handText}`;
+            setBroadcastResult(prev => prev + revealSuffix);
+            setHistoryLogs(prev => prev.length ? [{ ...prev[0], card: prev[0].card + revealSuffix }, ...prev.slice(1)] : prev);
+
+            if (killerId !== null && killerId !== targetId && targetHand.some(c => c.title === '陰謀家')) {
+              const killer = st.players.find(p => p.id === killerId);
+              if (killer) {
+                logActionAndResult(`${target.name} 手握【陰謀家】`, `觸發同歸於盡！${killer.name} 也同時出局`, target.name);
+                eliminatePlayer(killerId, null, '陰謀家同歸於盡');
+              }
+            }
+
+            setTimeout(() => { checkWinConditions(); }, 500);
+          };
+
+          const checkWinConditions = (isDeckEmpty = false) => {
+            if (gameOverRef.current) return true;
+            const st = stateRef.current;
+            const alivePlayers = st.players.filter(p => p.status === '存活');
+            if (alivePlayers.length === 1) {
+              triggerVictory(alivePlayers[0], '存活勝利：成為場上唯一倖存的玩家！');
+              return true;
+            }
+            if (alivePlayers.length === 0) {
+              triggerVictory(null, '同歸於盡：無人獲勝！');
+              return true;
+            }
+            if (isDeckEmpty || st.deck.length === 0) {
+              resolveDeckEmptyVictory(alivePlayers);
+              return true;
+            }
+            return false;
+          };
+
+          const resolveDeckEmptyVictory = (alivePlayers) => {
+            if (gameOverRef.current) return;
+            const hands = stateRef.current.playerHands;
+            for (let p of alivePlayers) {
+              const hand = hands[p.id] || [];
+              if (hand.some(c => c && c.title === '乞丐之王')) {
+                const has8or9 = alivePlayers.some(other => (hands[other.id] || []).some(c => c && (c.value === 8 || c.value === 9)));
+                if (has8or9) {
+                  triggerVictory(p, '乞丐之王勝利：發動絕密乞丐之王，獨享勝利！', true);
+                  return;
+                }
+              }
+            }
+
+            let maxScore = -99;
+            let winners = [];
+            alivePlayers.forEach(p => {
+              const hand = hands[p.id] || [];
+              let finalVal = hand[0] ? hand[0].value : 0;
+              if (p.playedCards.some(c => c && c.title === '商人')) finalVal += 2;
+              if (hand[0] && hand[0].title === '科學怪人' && p.playedCards.length > 0) {
+                const vals = p.playedCards.filter(Boolean).map(c => c.value);
+                if (vals.length > 0) finalVal = Math.min(...vals) + Math.max(...vals);
+              }
+              if (finalVal > maxScore) { maxScore = finalVal; winners = [p]; }
+              else if (finalVal === maxScore) winners.push(p);
+            });
+
+            if (winners.length === 1) triggerVictory(winners[0], `數值勝利：手牌結算最高分 (${maxScore}分)！`);
+            else triggerVictory(winners, `數值平手：共同分享勝利 (${maxScore}分)！`);
+          };
+
+          const triggerVictory = (winner, reason, noWitch = false) => {
+            if (gameOverRef.current) return;
+            gameOverRef.current = true;
+            const st = stateRef.current;
+            const list = Array.isArray(winner) ? [...winner] : (winner ? [winner] : []);
+            let winnerText = list.map(w => w.name).join(' & ') || '無人';
+            const winnerIds = list.map(x => x.id);
+            const w = st.witchTargetOwner;
+            if (!noWitch && w && list.some(x => x.id === w.targetId) && !list.some(x => x.id === w.witchOwnerId)) {
+              const witchOwner = st.players.find(p => p.id === w.witchOwnerId);
+              if (witchOwner) { winnerText += ` & ${witchOwner.name} (女巫共同獲勝)`; winnerIds.push(witchOwner.id); }
+            }
+            setGameOver(true);
+            // 勝場：每位獲勝者（含共同獲勝）得 1 個月亮標記；累計 2 勝贏得整場
+            const nextWins = { ...winsRef.current };
+            [...new Set(winnerIds)].forEach(id => { nextWins[id] = (nextWins[id] || 0) + 1; });
+            winsRef.current = nextWins;
+            setWins(nextWins);
+            const matchWinners = [...new Set(winnerIds)].filter(id => nextWins[id] >= 2).map(id => (st.players.find(p => p.id === id) || {}).name);
+            setWinnerInfo({ winnerName: winnerText, reason, matchWinners });
+            setBroadcastAction(`遊戲結束！【${winnerText}】獲勝`);
+            setBroadcastResult(`➔ ${reason}`);
+            setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '系統', card: `遊戲結束！【${winnerText}】獲勝 ➔ ${reason}` }, ...prev]);
+          };
+
+          const moonArenaCard = (moon, name, phase) => ({ ...moon, value: '🌙', category: `月亮 ${phase}/3`, icon: 'fa-moon', playedBy: name, isMoon: true });
+
+          // 第 3 張月亮翻開：手握狼人者獲勝（叛徒連帶）。回傳是否已結束遊戲
+          const checkWerewolfMoonWin = () => {
+            const st = stateRef.current;
+            let werewolfWinner = null;
+            let traitorWinner = null;
+            st.players.filter(p => p.status === '存活').forEach(p => {
+              const hand = (st.playerHands[p.id] || []).filter(Boolean);
+              if (hand.some(c => c.title === '狼人')) werewolfWinner = p;
+              if (hand.some(c => c.title === '叛徒')) traitorWinner = p;
+            });
+            if (!werewolfWinner) return false;
+            const winners = [werewolfWinner];
+            let reasonText = '狼月降臨勝利：第3張月亮翻開，手握狼人者掌控夜晚！';
+            if (traitorWinner && traitorWinner.id !== werewolfWinner.id) {
+              winners.push(traitorWinner);
+              reasonText += `叛徒【${traitorWinner.name}】共同獲勝！`;
+            }
+            triggerVictory(winners, reasonText);
+            return true;
+          };
+
+          // 回合抽牌：只抽 1 張。若是月亮牌 ➔ 先「打出」展示並計數，由玩家再選擇抽一打一／拿一還一（不給額外回合）
+          const drawTurnCard = (playerId) => {
+            const st = stateRef.current;
+            const drawer = st.players.find(p => p.id === playerId);
+            const tempDeck = [...st.deck];
+            if (tempDeck.length === 0) return { card: null };
+            const drawn = tempDeck.pop();
+            stateRef.current.deck = tempDeck;
+            setDeck(tempDeck);
+            if (!drawn.isMoon) return { card: drawn };
+            const phase = st.moonPhase + 1;
+            stateRef.current.moonPhase = phase;
+            setMoonPhase(phase);
+            setPlayedCardArena(moonArenaCard(drawn, drawer.name, phase));
+            logActionAndResult(`${drawer.name} 翻開【${drawn.title}】`, `月亮 ${phase}/3 ➔ 繼續抽牌`, drawer.name);
+            if (phase >= 3 && checkWerewolfMoonWin()) return { card: null, moon: drawn, gameEnded: true };
+            return { card: null, moon: drawn };
+          };
+
+          const drawCardForPlayer = (playerId, grantExtra = true) => {
+            const st = stateRef.current;
+            const drawer = st.players.find(p => p.id === playerId);
+            let tempDeck = [...st.deck];
+            let phase = st.moonPhase;
+            let finalDrawnCard = null;
+
+            while (tempDeck.length > 0) {
+              const drawn = tempDeck.pop();
+              if (drawn.isMoon) {
+                phase += 1;
+                setMoonPhase(phase);
+                stateRef.current.moonPhase = phase;
+                setPlayedCardArena(moonArenaCard(drawn, drawer.name, phase));
+                logActionAndResult(`${drawer.name} 翻開【${drawn.title}】`, `月亮 ${phase}/3`, drawer.name);
+
+                if (phase >= 3) {
+                  let werewolfWinner = null;
+                  let traitorWinner = null;
+                  st.players.filter(p => p.status === '存活').forEach(p => {
+                    const hand = (st.playerHands[p.id] || []).filter(Boolean);
+                    if (hand.some(c => c.title === '狼人')) werewolfWinner = p;
+                    if (hand.some(c => c.title === '叛徒')) traitorWinner = p;
+                  });
+                  if (werewolfWinner) {
+                    const winners = [werewolfWinner];
+                    let reasonText = '狼月降臨勝利：第3張月亮翻開，手握狼人者掌控夜晚！';
+                    if (traitorWinner && traitorWinner.id !== werewolfWinner.id) {
+                      winners.push(traitorWinner);
+                      reasonText += `叛徒【${traitorWinner.name}】共同獲勝！`;
+                    }
+                    stateRef.current.deck = tempDeck;
+                    setDeck(tempDeck);
+                    triggerVictory(winners, reasonText);
+                    return null;
+                  }
+                }
+              } else {
+                finalDrawnCard = drawn;
+                break;
+              }
+            }
+            stateRef.current.deck = tempDeck;
+            setDeck(tempDeck);
+            if (finalDrawnCard && playerId === 0) {
+              // 牌效造成的抽牌（女巫復活、賞金獵人重抽、煉金術士復活）：僅記錄自己抽到的牌
+              const msg = `你 抽到(${finalDrawnCard.value})【${finalDrawnCard.title}】`;
+              setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '你', card: msg }, ...prev]);
+            }
+            return finalDrawnCard;
+          };
+
+          const handleActionA = () => {
+            if (lockRef.current) return;
+            if (gameOver || players[currentTurnIndex].isAI) return;
+            const currentHand = playerHands[0] || [];
+            if (currentHand.length >= 2 || deck.length === 0) return;
+
+            const result = drawTurnCard(0);
+            if (result.card) {
+              setPlayerHands(prev => ({ ...prev, 0: [...currentHand, result.card] }));
+              logActionAndResult('你 執行【抽一打一】', `抽到(${result.card.value})【${result.card.title}】`, '你');
+            } else if (result.moon) {
+              // 月亮牌已打出：仍只有 1 張手牌，可再選「抽一打一」或「拿一還一」
+              if (!gameOverRef.current) setBroadcastResult(`➔ 月亮 ${stateRef.current.moonPhase}/3，請繼續【抽一打一】或【拿一還一】`);
+            } else if (!gameOverRef.current) {
+              advanceTurn();
+            }
+          };
+
+          const handleActionB = () => {
+            if (lockRef.current) return;
+            if (gameOver || players[currentTurnIndex].isAI) return;
+            const currentHand = playerHands[0] || [];
+            if (currentHand.length >= 2 || centerCards.length === 0) return;
+
+            const newCenter = [...centerCards];
+            const takenCard = newCenter.shift();
+
+            setCenterCards(newCenter);
+            setPlayerHands(prev => ({ ...prev, 0: [...currentHand, takenCard] }));
+            setIsReturningCenterCard(true);
+            setSelectedHandCard(null);
+
+            setBroadcastAction('你 執行【拿一還一】');
+            takenCardRef.current = takenCard;
+            setBroadcastResult(`➔ 拿到(${takenCard.value})【${takenCard.title}】，請選擇 1 張手牌放回暗牌堆`);
+          };
+
+          const handleCardClick = (card) => {
+            if (gameOver || players[currentTurnIndex].isAI) return;
+            const myHand = playerHands[0] || [];
+            if (myHand.length < 2) return;
+
+            setSelectedHandCard(selectedHandCard?.id === card.id ? null : card);
+          };
+
+          const handleConfirmPlay = () => {
+            if (!selectedHandCard || players[currentTurnIndex].isAI) return;
+            if (lockRef.current) return;
+            lockRef.current = true;
+            setActionLocked(true);
+            
+            if (isReturningCenterCard) {
+              const cardToReturn = selectedHandCard;
+              const remainingHand = (playerHands[0] || []).filter(c => c.id !== cardToReturn.id);
+              
+              setPlayerHands(prev => ({ ...prev, 0: remainingHand }));
+              setCenterCards(prev => [...prev, cardToReturn]);
+              setSelectedHandCard(null);
+              setIsReturningCenterCard(false);
+
+              const taken = takenCardRef.current;
+              logActionAndResult('你 執行【拿一還一】', `${taken ? `拿到(${taken.value})【${taken.title}】，` : ''}放回(${cardToReturn.value})【${cardToReturn.title}】 ➔ 中央暗牌維持 3 張`, '你');
+              takenCardRef.current = null;
+              advanceTurn();
+              return;
+            }
+
+            const cardToPlay = selectedHandCard;
+            setSelectedHandCard(null);
+            executePlayPhase(0, cardToPlay);
+          };
+
+          const executePlayPhase = (playerId, card) => {
+            const player = stateRef.current.players.find(p => p.id === playerId);
+            setPlayerHands(prev => ({ ...prev, [playerId]: (prev[playerId] || []).filter(c => c && c.id !== card?.id) }));
+            setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, protected: card?.type === 'BODYGUARD', playedCards: [...p.playedCards, card] } : p));
+            setPlayedCardArena({ ...card, playedBy: player.name });
+            // 延後結算，確保讀到已更新的手牌與面前牌
+            setTimeout(() => { if (!gameOverRef.current && resolveRef.current) resolveRef.current(playerId, card); }, 500);
+          };
+
+          const resolveCardEffect = (sourceId, card) => {
+            const source = players.find(p => p.id === sourceId);
+            if (!card || !card.type) return;
+
+            switch (card.type) {
+              case 'MAYOR':
+              case 'WEREWOLF':
+                logActionAndResult(`${source.name} 打出了(${card.value})【${card.title}】`, '自我淘汰！', source.name);
+                eliminatePlayer(sourceId, sourceId, `打出【${card.title}】自我淘汰`);
+                advanceTurn();
+                break;
+
+              case 'VAMPIRE':
+                const highCards = (source.playedCards || []).filter(c => c && c.value >= 7);
+                if (highCards.length >= 2) {
+                  triggerVictory(source, '吸血鬼降臨：面前集滿兩張 7 以上卡牌，立刻勝利！');
+                } else {
+                  logActionAndResult(`${source.name} 打出了(${card.value})【吸血鬼】`, '面前高階牌不足 2 張 ➔ 無法勝利', source.name);
+                  advanceTurn();
+                }
+                break;
+
+              case 'BODYGUARD':
+                logActionAndResult(`${source.name} 打出了(4)【保鏢】獲得保護`, '免役牌效直至下個回合', source.name);
+                advanceTurn();
+                break;
+
+              case 'SERVANT':
+                logActionAndResult(`${source.name} 打出了(1)【僕人】`, '置於面前 ➔ 回合結束時可棄掉換額外回合', source.name);
+                advanceTurn();
+                break;
+
+              case 'DRUNKARD': {
+                const stNow = stateRef.current;
+                const participants = stNow.players.filter(p => p.status === '存活' && (p.id === sourceId || !p.protected));
+                const skipped = stNow.players.filter(p => p.status === '存活' && p.id !== sourceId && p.protected);
+                let pool = [];
+                participants.forEach(p => { pool.push(...(stNow.playerHands[p.id] || []).filter(Boolean)); });
+                pool = shuffle(pool);
+                const dealt = {};
+                participants.forEach(p => { dealt[p.id] = pool.length ? [pool.pop()] : []; });
+                stateRef.current.playerHands = { ...stNow.playerHands, ...dealt };
+                setPlayerHands(prev => ({ ...prev, ...dealt }));
+                logActionAndResult(
+                  `${source.name} 打出了(1)【醉漢】重洗手牌`,
+                  (skipped.length ? `全員手牌已重發（${skipped.map(p => p.name).join('、')} 受保護未參與）` : '全員手牌已重發') + (dealt[0] ? gotCardsText(dealt[0]) : ''),
+                  source.name
+                );
+                advanceTurn();
+                break;
+              }
+
+              case 'VILLAGER':
+              case 'ASSASSIN':
+              case 'SEER':
+              case 'TAX_COLLECTOR':
+              case 'INQUISITOR':
+              case 'BARKEEPER':
+              case 'GIRL':
+              case 'THIEF':
+              case 'PICKPOCKET':
+              case 'SWAP_HAND':
+              case 'WITCH':
+              case 'BOUNTY_HUNTER':
+              case 'GRAVEDIGGER':
+              case 'NIGHT_WATCHMAN': {
+                if (sourceId === 0) {
+                  setInteractionModal({ type: card.type, card });
+                } else {
+                  handleAIEffectSelection(sourceId, card);
+                }
+                break;
+              }
+
+              default:
+                logActionAndResult(`${source.name} 打出了(${card.value})【${card.title}】`, '無任何效果（因為非結算時）', source.name);
+                advanceTurn();
+                break;
+            }
+          };
+
+          const handleAIEffectSelection = (sourceId, card) => {
+            const aliveTargets = players.filter(p => p.id !== sourceId && p.status === '存活' && !p.protected);
+            const sourcePlayer = players[sourceId];
+
+            if (card.type === 'NIGHT_WATCHMAN') {
+              const center = [...centerCards];
+              const aiHand = playerHands[sourceId] || [];
+              const combined = [...center, ...aiHand];
+              const keepCard = combined.pop();
+              setCenterCards(shuffle(combined));
+              setPlayerHands(prev => ({ ...prev, [sourceId]: [keepCard] }));
+              logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【守夜人】`, '檢視中央暗牌 ➔ 重新洗牌歸位', sourcePlayer.name);
+              advanceTurn();
+              return;
+            }
+
+            if (card.type === 'GRAVEDIGGER') {
+              const validTargets = players.filter(p => (p.id === sourceId || !p.protected) && p.playedCards.some(c => c && c.type !== 'WEREWOLF'));
+              if (validTargets.length > 0) {
+                const target = validTargets[Math.floor(Math.random() * validTargets.length)];
+                const nonWolfCards = target.playedCards.filter(c => c.type !== 'WEREWOLF');
+                const stolenCard = nonWolfCards[Math.floor(Math.random() * nonWolfCards.length)];
+                
+                const updatedTargetPlayed = target.playedCards.filter(c => c.id !== stolenCard.id);
+                setPlayers(prev => prev.map(p => p.id === target.id ? { ...p, playedCards: updatedTargetPlayed } : p));
+                
+                const currentAiHand = playerHands[sourceId] || [];
+                setPlayerHands(prev => ({ ...prev, [sourceId]: [...currentAiHand, stolenCard] }));
+                
+                logActionAndResult(`${sourcePlayer.name} 對 ${target.name} 打出了(${card.value})【掘墓人】`, `奪取面前【${stolenCard.title}】`, sourcePlayer.name);
+              } else {
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【掘墓人】`, '場上無卡牌可選 ➔ 能力失敗', sourcePlayer.name);
+              }
+              advanceTurn();
+              return;
+            }
+
+            if (card.type === 'PICKPOCKET') {
+              if (aliveTargets.length < 2) {
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, '可選對手不足 ➔ 能力無效', sourcePlayer.name);
+              } else {
+                const [a, b] = shuffle(aliveTargets);
+                const aH = playerHands[a.id] || [];
+                const bH = playerHands[b.id] || [];
+                setPlayerHands(prev => ({ ...prev, [a.id]: bH, [b.id]: aH }));
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, `秘密交換了 ${a.name} 與 ${b.name} 的手牌${a.id === 0 ? gotCardsText(bH) : (b.id === 0 ? gotCardsText(aH) : '')}`, sourcePlayer.name);
+              }
+              advanceTurn();
+              return;
+            }
+
+            if (aliveTargets.length === 0) {
+              logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【${card.title}】`, '場面無有效目標 ➔ 能力無效', sourcePlayer.name);
+              advanceTurn();
+              return;
+            }
+            const randomTarget = aliveTargets[Math.floor(Math.random() * aliveTargets.length)];
+
+            switch (card.type) {
+              case 'BOUNTY_HUNTER': {
+                let newDrawn = drawCardForPlayer(randomTarget.id, false) || reserveCards[0];
+                
+                const targetOldHand = (playerHands[randomTarget.id] || [])[0];
+                if (targetOldHand) setPlayers(prev => prev.map(p => p.id === randomTarget.id ? { ...p, playedCards: [...p.playedCards, { ...targetOldHand, revealedBy: 'BOUNTY' }] } : p));
+                setHandNow(randomTarget.id, [newDrawn]);
+                
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【賞金獵人】`, `公開手牌【${targetOldHand ? targetOldHand.title : '未知'}】並重抽`, sourcePlayer.name);
+                
+                if (newDrawn.type === 'MAYOR' || newDrawn.type === 'WEREWOLF') {
+                  logActionAndResult(`${randomTarget.name} 重抽至【${newDrawn.title}】`, `觸發死罪 ➔ ${randomTarget.name} 出局！`, randomTarget.name);
+                  eliminatePlayer(randomTarget.id, sourceId, '賞金獵人抽中市長/狼人出局');
+                } else if (newDrawn.type === 'VAMPIRE') {
+                  const targetHighCards = (randomTarget.playedCards || []).filter(c => c && c.value >= 7);
+                  if (targetHighCards.length >= 2) {
+                    triggerVictory(randomTarget, '賞金獵人觸發吸血鬼降臨勝利！');
+                    return;
+                  }
+                }
+                advanceTurn();
+                break;
+              }
+              case 'VILLAGER':
+              case 'ASSASSIN': {
+                const guessedVal = Math.floor(Math.random() * 11);
+                executeGuess(sourceId, randomTarget.id, guessedVal, card.type === 'ASSASSIN');
+                break;
+              }
+              case 'SEER':
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【先知】`, `秘密檢視其手牌`, sourcePlayer.name);
+                advanceTurn();
+                break;
+              case 'TAX_COLLECTOR': {
+                const targetHand = playerHands[randomTarget.id] || [];
+                const targetVal = targetHand[0] ? targetHand[0].value : '?';
+                const isHit = targetHand.some(c => c?.value === 0 || c?.value === 1);
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(2)【稅務官】審查`, isHit ? `${randomTarget.name}(${targetVal})出局！` : `審查失敗 ➔ 手牌非 0 或 1`, sourcePlayer.name);
+                if (isHit) eliminatePlayer(randomTarget.id, sourceId, '稅務官審查出局');
+                advanceTurn();
+                break;
+              }
+              case 'INQUISITOR': {
+                const targetHand = playerHands[randomTarget.id] || [];
+                const targetVal = targetHand[0] ? targetHand[0].value : '?';
+                const isHit = targetHand.some(c => c?.value === 9 || c?.value === 10);
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(2)【審判官】審判`, isHit ? `${randomTarget.name}(${targetVal})出局！` : `審判失敗 ➔ 手牌非 9 或 10`, sourcePlayer.name);
+                if (isHit) eliminatePlayer(randomTarget.id, sourceId, '審判官審判出局');
+                advanceTurn();
+                break;
+              }
+              case 'BARKEEPER':
+              case 'GIRL': {
+                const sHand = (playerHands[sourceId] || [])[0];
+                const tHand = (playerHands[randomTarget.id] || [])[0];
+                const cardVal = 3;
+                const cardName = card.type === 'BARKEEPER' ? '酒保' : '小女孩';
+                const cmpType = '比大小';
+                if (sHand && tHand) {
+                  if (card.type === 'BARKEEPER') {
+                    if (sHand.value < tHand.value) {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌較小出局！`, sourcePlayer.name);
+                      eliminatePlayer(sourceId, randomTarget.id, '酒保比小出局');
+                    } else if (tHand.value < sHand.value) {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌較小出局！`, sourcePlayer.name);
+                      eliminatePlayer(randomTarget.id, sourceId, '酒保比小出局');
+                    } else {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `平手無事發生`, sourcePlayer.name);
+                    }
+                  } else {
+                    if (sHand.value > tHand.value) {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌較大出局！`, sourcePlayer.name);
+                      eliminatePlayer(sourceId, randomTarget.id, '小女孩比大出局');
+                    } else if (tHand.value > sHand.value) {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌較大出局！`, sourcePlayer.name);
+                      eliminatePlayer(randomTarget.id, sourceId, '小女孩比大出局');
+                    } else {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `平手無事發生`, sourcePlayer.name);
+                    }
+                  }
+                }
+                advanceTurn();
+                break;
+              }
+              case 'SWAP_HAND':
+              case 'THIEF': {
+                const sHand = playerHands[sourceId] || [];
+                const tHand = playerHands[randomTarget.id] || [];
+                setPlayerHands(prev => ({ ...prev, [sourceId]: tHand, [randomTarget.id]: sHand }));
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【${card.title}】`, `手牌交換成功！獲得額外回合${randomTarget.id === 0 ? gotCardsText(sHand) : ''}`, sourcePlayer.name);
+                setExtraTurnPlayerId(sourceId);
+                advanceTurn();
+                break;
+              }
+              case 'WITCH': {
+                const deadPlayers = players.filter(p => p.status === '出局');
+                if (deadPlayers.length > 0) {
+                  const reviveP = deadPlayers[Math.floor(Math.random() * deadPlayers.length)];
+                  const drawn = drawCardForPlayer(reviveP.id, false) || reserveCards[0];
+                  setPlayerHands(prev => ({ ...prev, [reviveP.id]: [drawn] }));
+                  setPlayers(prev => prev.map(p => p.id === reviveP.id ? { ...p, status: '存活', protected: false } : p));
+                  setWitchTargetOwner({ witchOwnerId: sourceId, targetId: reviveP.id });
+                  logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, `復活了 ${reviveP.name} ➔ 綁定共同勝利`, sourcePlayer.name);
+                } else {
+                  logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, '場上無已淘汰玩家可復活 ➔ 能力無效', sourcePlayer.name);
+                }
+                advanceTurn();
+                break;
+              }
+              default:
+                advanceTurn();
+                break;
+            }
+          };
+
+          const executeGuess = (sourceId, targetId, guessedValue, isAssassin = false, skipSpy = false, secondGuessIn = null) => {
+            const targetHand = (playerHands[targetId] || []).filter(Boolean);
+            const target = players.find(p => p.id === targetId);
+            const source = players.find(p => p.id === sourceId);
+            const cardName = isAssassin ? '刺客' : '村民';
+            const cardValue = isAssassin ? 0 : 1;
+
+            // 刺客：兩次猜測（同一人）。人類自選；AI 隨機選一個不同數值
+            let secondGuess = null;
+            if (isAssassin) {
+              if (secondGuessIn !== null && !Number.isNaN(secondGuessIn)) secondGuess = secondGuessIn;
+              else {
+                const pool = [...Array(11).keys()].filter(v => v !== guessedValue);
+                secondGuess = pool[Math.floor(Math.random() * pool.length)];
+              }
+            }
+            const guesses = isAssassin ? [guessedValue, secondGuess] : [guessedValue];
+            const guessText = isAssassin ? `猜(${guessedValue})與(${secondGuess})` : `猜(${guessedValue})`;
+            const actionText = `${source.name} 對 ${target.name} 打出了(${cardValue})【${cardName}】${guessText}`;
+            const hitValue = guesses.find(g => targetHand.some(c => c.value === g));
+
+            if (hitValue !== undefined) {
+              logActionAndResult(actionText, `猜測成功！${target.name}(${hitValue}) 出局`, source.name);
+              eliminatePlayer(targetId, sourceId, `遭猜中數值 ${hitValue}`);
+              advanceTurn();
+              return;
+            }
+
+            // 猜測未中：目標手握間諜可反殺
+            const spyCardIndex = targetHand.findIndex(c => c.type === 'SPY');
+            if (spyCardIndex !== -1 && !skipSpy) {
+              if (targetId === 0) {
+                setInteractionModal({ type: 'COUNTER_SPY', title: '間諜反殺', sourceId, targetId, guessedValue, secondGuess, isAssassin });
+                return;
+              }
+              // AI 間諜觸發反殺：使猜測者出局，並接手其手牌
+              const sourceHand = (stateRef.current.playerHands[sourceId] || []).filter(Boolean);
+              setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...p.playedCards, targetHand[spyCardIndex]] } : p));
+              logActionAndResult(actionText, `${target.name} 打出【間諜】反殺！${source.name} 出局且接手手牌`, target.name);
+              eliminatePlayer(sourceId, null, '間諜反殺', true);
+              setPlayerHands(prev => ({ ...prev, [targetId]: sourceHand }));
+              advanceTurn();
+              return;
+            }
+
+            logActionAndResult(actionText, '猜測失敗 ➔ 無事發生', source.name);
+            advanceTurn();
+          };
+
+          const handleHumanInteractionSubmit = (payload) => {
+            const { type, targetId, guessedValue, guessedValue2, secondaryTargetId, stolenCardId, keepCardId } = payload;
+            const sourceId = 0;
+            const target = players.find(p => p.id === targetId);
+            setInteractionModal(null);
+
+            if (type === 'SERVANT_CHOICE') {
+              useServant(0, payload.servantId);
+            } else if (type === 'VILLAGER' || type === 'ASSASSIN') {
+              executeGuess(0, targetId, parseInt(guessedValue), type === 'ASSASSIN', false, type === 'ASSASSIN' ? parseInt(guessedValue2) : null);
+            } else if (type === 'NIGHT_WATCHMAN') {
+              const myHand = playerHands[0] || [];
+              const combined = [...centerCards, ...myHand];
+              const keptCard = combined.find(c => c.id === keepCardId) || combined[0];
+              const remainingCenter = combined.filter(c => c.id !== keptCard.id);
+              setCenterCards(shuffle(remainingCenter));
+              setPlayerHands(prev => ({ ...prev, 0: [keptCard] }));
+              logActionAndResult('你 打出了(3)【守夜人】', '檢視並調整中央暗牌 ➔ 成功保留 1 張卡牌', '你');
+              advanceTurn();
+            } else if (type === 'GRAVEDIGGER') {
+              const targetP = players.find(p => p.id === targetId);
+              const stolen = targetP.playedCards.find(c => c.id === stolenCardId);
+              if (stolen) {
+                const updatedPlayed = targetP.playedCards.filter(c => c.id !== stolenCardId);
+                setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: updatedPlayed } : p));
+                setPlayerHands(prev => ({ ...prev, 0: [...(prev[0] || []), stolen] }));
+                logActionAndResult(`你 對 ${targetP.name} 打出了(6)【掘墓人】`, `奪取了面前(${stolen.value})【${stolen.title}】｜已加入你的手牌`, '你');
+              } else {
+                logActionAndResult('你 打出了(6)【掘墓人】', '場面無可奪取之卡牌 ➔ 能力失敗', '你');
+              }
+              advanceTurn();
+            } else if (type === 'BOUNTY_HUNTER') {
+              let newDrawn = drawCardForPlayer(targetId, false) || reserveCards[0];
+              
+              const targetOldHand = (playerHands[targetId] || [])[0];
+              if (targetOldHand) setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...p.playedCards, { ...targetOldHand, revealedBy: 'BOUNTY' }] } : p));
+              setHandNow(targetId, [newDrawn]);
+              logActionAndResult(`你 對 ${target.name} 打出了(5)【賞金獵人】`, `公開手牌【${targetOldHand ? targetOldHand.title : '未知'}】並強制重抽`, '你');
+
+              if (newDrawn.type === 'MAYOR' || newDrawn.type === 'WEREWOLF') {
+                logActionAndResult(`${target.name} 重抽至【${newDrawn.title}】`, `觸發死罪 ➔ ${target.name} 出局！`, target.name);
+                eliminatePlayer(targetId, 0, '賞金獵人抽中市長/狼人出局');
+              } else if (newDrawn.type === 'VAMPIRE') {
+                const targetHighCards = (target.playedCards || []).filter(c => c && c.value >= 7);
+                if (targetHighCards.length >= 2) {
+                  triggerVictory(target, '賞金獵人觸發吸血鬼降臨勝利！');
+                  return;
+                }
+              }
+              advanceTurn();
+            } else if (type === 'SEER') {
+              const targetHand = playerHands[targetId] || [];
+              const cName = targetHand[0] ? targetHand[0].title : '無';
+              const cVal = targetHand[0] ? targetHand[0].value : '?';
+              logActionAndResult(`你 對 ${target.name} 打出了(2)【先知】`, `秘密檢視結果 ➔ ${target.name} 手牌為 ${cName}(${cVal})`, '你');
+              setInteractionModal({ type: 'INFO', title: '先知檢視結果', message: `玩家 ${target.name} 的手牌為：${cName} (數值 ${cVal})` });
+              return;
+              advanceTurn();
+            } else if (type === 'TAX_COLLECTOR') {
+              const targetHand = playerHands[targetId] || [];
+              const targetVal = targetHand[0] ? targetHand[0].value : '?';
+              const isHit = targetHand.some(c => c.value === 0 || c.value === 1);
+              logActionAndResult(`你 對 ${target.name} 打出了(2)【稅務官】審查`, isHit ? `${target.name}(${targetVal})手牌符合 ➔ 宣佈出局！` : `審查失敗 ➔ ${target.name} 手牌非 0 或 1`, '你');
+              if (isHit) eliminatePlayer(targetId, 0, '稅務官審查出局');
+              advanceTurn();
+            } else if (type === 'INQUISITOR') {
+              const targetHand = playerHands[targetId] || [];
+              const targetVal = targetHand[0] ? targetHand[0].value : '?';
+              const isHit = targetHand.some(c => c.value === 9 || c.value === 10);
+              logActionAndResult(`你 對 ${target.name} 打出了(2)【審判官】審判`, isHit ? `${target.name}(${targetVal})手牌符合 ➔ 宣佈出局！` : `審判失敗 ➔ ${target.name} 手牌非 9 或 10`, '你');
+              if (isHit) eliminatePlayer(targetId, 0, '審判官審判出局');
+              advanceTurn();
+            } else if (type === 'BARKEEPER' || type === 'GIRL') {
+              const sHand = (playerHands[0] || [])[0];
+              const tHand = (playerHands[targetId] || [])[0];
+              const cName = type === 'BARKEEPER' ? '酒保' : '小女孩';
+              if (sHand && tHand) {
+                if (type === 'BARKEEPER') {
+                  if (sHand.value < tHand.value) {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `你的手牌(${sHand.value})較小 ➔ 你出局！`, '你');
+                    eliminatePlayer(0, targetId, '酒保比小出局');
+                  } else if (tHand.value < sHand.value) {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, '你');
+                    eliminatePlayer(targetId, 0, '酒保比小出局');
+                  } else {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `雙方數值相同 ➔ 平手無事發生`, '你');
+                  }
+                } else {
+                  if (sHand.value > tHand.value) {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `你的手牌(${sHand.value})較大 ➔ 你出局！`, '你');
+                    eliminatePlayer(0, targetId, '小女孩比大出局');
+                  } else if (tHand.value > sHand.value) {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, '你');
+                    eliminatePlayer(targetId, 0, '小女孩比大出局');
+                  } else {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `雙方數值相同 ➔ 平手無事發生`, '你');
+                  }
+                }
+              }
+              advanceTurn();
+            } else if (type === 'THIEF' || type === 'SWAP_HAND') {
+              const sHand = playerHands[0] || [];
+              const tHand = playerHands[targetId] || [];
+              setPlayerHands(prev => ({ ...prev, 0: tHand, [targetId]: sHand }));
+              logActionAndResult(`你 對 ${target.name} 打出了(7)【小偷】`, `手牌交換成功！獲得額外回合${gotCardsText(tHand)}`, '你');
+              setExtraTurnPlayerId(0);
+              advanceTurn();
+            } else if (type === 'PICKPOCKET') {
+              const t1 = players.find(p => p.id === targetId);
+              const t2 = players.find(p => p.id === secondaryTargetId);
+              const t1Hand = playerHands[targetId] || [];
+              const t2Hand = playerHands[secondaryTargetId] || [];
+              setPlayerHands(prev => ({ ...prev, [targetId]: t2Hand, [secondaryTargetId]: t1Hand }));
+              logActionAndResult(`你 打出了(6)【扒手】`, `秘密交換了 ${t1.name} 與 ${t2.name} 的手牌`, '你');
+              advanceTurn();
+            } else if (type === 'WITCH') {
+              const deadTargets = players.filter(p => p.status === '出局');
+              if (deadTargets.length > 0 && targetId !== undefined && target) {
+                const drawn = drawCardForPlayer(targetId, false) || reserveCards[0];
+                setPlayerHands(prev => ({ ...prev, [targetId]: [drawn] }));
+                setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, status: '存活', protected: false } : p));
+                setWitchTargetOwner({ witchOwnerId: 0, targetId });
+                logActionAndResult(`你 打出了(4)【女巫】`, `復活了 ${target.name} ➔ 綁定共同勝利`, '你');
+              } else {
+                logActionAndResult('你 打出了(4)【女巫】', '場上無已淘汰玩家可復活 ➔ 能力無效', '你');
+              }
+              advanceTurn();
+            } else if (type === 'COUNTER_SPY') {
+              const attacker = players.find(p => p.id === payload.attackerId);
+              const attackerHand = playerHands[payload.attackerId] || [];
+              logActionAndResult('你 打出了(7)【間諜】', `反殺猜測者 ${attacker.name}！該玩家淘汰並奪取其手牌`, '你');
+              eliminatePlayer(payload.attackerId, null, '間諜反殺出局', true);
+              const spyC = (playerHands[0] || []).find(c => c && c.type === 'SPY');
+              if (spyC) setPlayers(prev => prev.map(p => p.id === 0 ? { ...p, playedCards: [...p.playedCards, spyC] } : p));
+              setPlayerHands(prev => ({ ...prev, 0: attackerHand.filter(Boolean) }));
+              advanceTurn();
+            }
+          };
+
+          const proceedToNext = (forceExtra = null) => {
+            lockRef.current = false;
+            setActionLocked(false);
+            const st = stateRef.current;
+            const extra = forceExtra !== null ? forceExtra : st.extraTurnPlayerId;
+            let nextIdx;
+            if (extra !== null && st.players[extra] && st.players[extra].status === '存活') nextIdx = extra;
+            else nextIdx = getNextAliveIndex(st.currentTurnIndex, st.players);
+            setExtraTurnPlayerId(null);
+            // 保鏢：下個回合開始時解除保護
+            setPlayers(prev => prev.map(p => p.id === nextIdx ? { ...p, protected: false } : p));
+            setCurrentTurnIndex(nextIdx);
+            setTurnTick(t => t + 1);
+            
+          };
+
+          const useServant = (pid, servantId) => {
+            const p = stateRef.current.players.find(x => x.id === pid);
+            setPlayers(prev => prev.map(x => x.id === pid ? { ...x, playedCards: x.playedCards.filter(c => !(c && c.id === servantId)) } : x));
+            logActionAndResult(`${p.name} 棄掉面前【僕人】`, '立刻進行額外回合！', p.name);
+            proceedToNext(pid);
+          };
+
+          const advanceTurn = () => {
+            const st0 = stateRef.current;
+            const delay = st0.players[st0.currentTurnIndex]?.isAI ? 3000 : 1200;
+            setTimeout(() => {
+              if (gameOverRef.current) return;
+              if (checkWinConditions()) return;
+              const st = stateRef.current;
+              const cur = st.players[st.currentTurnIndex];
+              if (cur && cur.status === '存活' && st.extraTurnPlayerId === null) {
+                const servant = cur.playedCards.find(c => c && c.type === 'SERVANT');
+                if (servant) {
+                  if (cur.isAI) { useServant(cur.id, servant.id); return; }
+                  setInteractionModal({ type: 'SERVANT_CHOICE', title: '僕人', servantId: servant.id });
+                  return;
+                }
+              }
+              proceedToNext();
+            }, delay);
+          };
+
+          useEffect(() => {
+            if (gameOver) return;
+
+            // 僅在遊戲開始且牌庫真為0時檢查結算，防止初始化階段誤觸發
+            if (deck.length === 0 && playerHands[0] && playerHands[0].length > 0) {
+              const alivePlayers = players.filter(p => p.status === '存活');
+              resolveDeckEmptyVictory(alivePlayers);
+              return;
+            }
+
+            const currentPlayer = players[currentTurnIndex];
+            if (!currentPlayer) return;
+
+            if (currentPlayer.status === '出局') {
+              advanceTurn();
+              return;
+            }
+
+            if (currentPlayer.isAI) {
+              if (pausedRef.current) { pendingAiRef.current = true; return; }
+              const aiTimer = setTimeout(async () => {
+                if (pausedRef.current) { pendingAiRef.current = true; return; }
+                pendingAiRef.current = false;
+                const myToken = ++aiRunRef.current;
+                const stale = () => gameOverRef.current || aiRunRef.current !== myToken;
+                const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+                const pid = currentPlayer.id;
+
+                let hand = (stateRef.current.playerHands[pid] || []).filter(Boolean);
+                let drawnCard = null;
+                while (hand.length < 2 && stateRef.current.deck.length > 0) {
+                  const result = drawTurnCard(pid);
+                  if (result.gameEnded || gameOverRef.current) return;
+                  if (result.card) { drawnCard = result.card; break; }
+                  if (result.moon) {
+                    // 月亮牌展示停留 3 秒，讓玩家看清楚，再抽下一張
+                    await sleep(3000);
+                    while (pausedRef.current && !stale()) await sleep(300);
+                    if (stale()) return;
+                    continue;
+                  }
+                  break;
+                }
+
+                if (drawnCard) {
+                  hand = [...hand, drawnCard];
+                  setHandNow(pid, hand);
+                }
+
+                if (hand.length >= 2) {
+                  const safeCard = hand.find(c => c?.type && c.type !== 'WEREWOLF' && c.type !== 'MAYOR') || hand[0];
+                  if (safeCard) executePlayPhase(pid, safeCard);
+                  else advanceTurn();
+                } else {
+                  advanceTurn();
+                }
+              }, 1200);
+
+              return () => clearTimeout(aiTimer);
+            }
+          }, [currentTurnIndex, gameOver, turnTick]);
+
+          const myHand = playerHands[0] || [];
+          resolveRef.current = resolveCardEffect;
+
+          // 長期放在面前的牌：僕人、商人、煉金術士、賞金獵人公開的手牌、保鏢（僅保護期間）
+          const getFrontCards = (p) => p.playedCards.filter(c => c && (
+            c.type === 'SERVANT' ||
+            c.title === '商人' ||
+            c.title === '煉金術士' ||
+            c.revealedBy === 'BOUNTY' ||
+            (c.type === 'BODYGUARD' && p.protected)
+          ));
+
+          const toggleAiPause = () => {
+            const next = !pausedRef.current;
+            pausedRef.current = next;
+            setAiPaused(next);
+            if (!next && pendingAiRef.current) {
+              pendingAiRef.current = false;
+              setTurnTick(t => t + 1);
+            }
+          };
+
+          return (
+            <div className="min-h-[100dvh] h-[100dvh] w-screen flex flex-col justify-between overflow-hidden bg-slate-950 text-slate-100 select-none touch-manipulation pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+              
+              <div className="mobile-container h-full w-full max-w-[480px] mx-auto flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 relative">
+
+                {/* A區: 頂部狀態列 */}
+                <header className="h-[4.5%] min-h-[32px] bg-slate-900/90 backdrop-blur border-b border-cyan-900/40 px-3 flex items-center justify-between z-20 shrink-0">
+                  <div className="flex items-center">
+                    <span className="text-[10px] font-mono font-bold text-cyan-400 tracking-tight">
+                      {version}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button onClick={toggleAiPause} className={`flex items-center space-x-1.5 border text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95 ${aiPaused ? 'bg-amber-500/20 border-amber-400/70 text-amber-300' : 'bg-slate-800/90 border-slate-500/50 text-slate-300'}`}>
+                      <i className={`fa-solid ${aiPaused ? 'fa-play' : 'fa-pause'} text-[10px]`}></i>
+                      <span className="font-bold text-[10px]">{aiPaused ? '繼續' : '暫停'}</span>
+                    </button>
+                    <button onClick={() => setIsDeckModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-cyan-500/40 text-cyan-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
+                      <i className="fa-solid fa-layer-group text-cyan-400 text-[10px]"></i>
+                      <span className="font-bold text-[10px]">牌庫</span>
+                      <span className="font-mono font-bold text-amber-300 ml-0.5">
+                        {deck.length}
+                      </span>
+                    </button>
+                    <button onClick={() => setIsHistoryModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-purple-500/40 text-purple-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
+                      <i className="fa-solid fa-clock-rotate-left text-purple-400 text-[10px]"></i>
+                      <span className="font-bold text-[10px]">紀錄</span>
+                    </button>
+                  </div>
+                </header>
+
+                {/* B區: 玩家頭像區 */}
+                <section className="h-[10.5%] min-h-[64px] bg-slate-900/60 border-b border-slate-800/80 px-1.5 py-1.5 flex items-center overflow-x-auto gap-1.5 shrink-0 scrollbar-none">
+                  {players.map((player, idx) => {
+                    const isTurn = currentTurnIndex === idx;
+                    const isDead = player.status === '出局';
+                    return (
+                      <div 
+                        key={player.id}
+                        onClick={() => setViewPlayerId(player.id)}
+                        className={`cursor-pointer player-box min-w-[54px] flex-1 bg-slate-800/70 rounded-lg p-1 flex flex-col items-center justify-center relative transition-all duration-300 ${
+                          isTurn ? 'border-2 border-emerald-500/80 shadow-lg scale-[1.02]' : 'border border-slate-700/60 opacity-85'
+                        } ${isDead ? 'grayscale opacity-30' : ''}`}
+                      >
+                        <div className={`turn-indicator absolute -top-1 -right-1 w-3 h-3 rounded-full bg-slate-900 border flex items-center justify-center ${isTurn ? 'border-emerald-400 turn-active-glow' : 'border-slate-700'}`}>
+                          <span className={`light-dot rounded-full ${isTurn ? 'w-1.5 h-1.5 bg-emerald-400 animate-pulse' : 'w-1 h-1 bg-slate-500'}`}></span>
+                        </div>
+                        <div className="relative inline-block mb-1">
+                          <div className={`w-7 h-7 rounded-full bg-gradient-to-tr ${player.gradient} p-0.5 shadow`}>
+                            <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${player.seed}`} alt={player.name} className="w-full h-full rounded-full bg-slate-900" />
+                          </div>
+                          {(wins[player.id] || 0) > 0 && (
+                            <div className="absolute -top-1 -left-2.5 z-10 h-3.5 px-1 rounded-full bg-slate-900 border border-amber-300/80 text-amber-300 flex items-center gap-px text-[7px] leading-none">
+                              {Array.from({ length: Math.min(wins[player.id], 2) }).map((_, i) => <i key={i} className="fa-solid fa-moon"></i>)}
+                            </div>
+                          )}
+                          <div className="absolute -top-1 -right-2.5 flex flex-col items-end gap-px z-10">
+                            {player.protected && !isDead && (
+                              <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-cyan-400 text-cyan-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-shield-halved"></i></span>
+                            )}
+                            {getFrontCards(player).length > 0 && (
+                              <span className="h-3.5 px-1 rounded-full bg-slate-900 border border-amber-400/70 text-amber-300 flex items-center space-x-px text-[8px] font-bold leading-none"><span>🃏</span><span>{getFrontCards(player).length}</span></span>
+                            )}
+                            {witchTargetOwner && witchTargetOwner.targetId === player.id && (
+                              <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-purple-400 text-purple-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-hat-wizard"></i></span>
+                            )}
+                            {witchTargetOwner && witchTargetOwner.witchOwnerId === player.id && (
+                              <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-pink-400 text-pink-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-wand-magic-sparkles"></i></span>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`text-[9.5px] truncate w-full text-center leading-tight ${isTurn ? 'font-black text-emerald-300' : 'font-bold text-slate-200'}`}>{player.name}</span>
+                      </div>
+                    );
+                  })}
+                </section>
+
+                {/* C區: 中央戰場區 */}
+                <main className="h-[55%] flex-1 bg-gradient-to-b from-slate-950 via-slate-900/80 to-slate-950 p-2 flex flex-col justify-between items-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
+
+                  {/* C區頂部欄：雙行動態中控廣播（簡報 + 最終結果） */}
+                  <div className="w-full z-10 mb-1 px-1">
+                    <div className="w-full bg-slate-900/95 border border-emerald-500/50 p-2 rounded-xl shadow-lg flex flex-col justify-center">
+                      <div className="flex items-center space-x-1.5 overflow-hidden">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                        <span className="text-[11.5px] font-black text-emerald-300 truncate tracking-wide">{broadcastAction}</span>
+                      </div>
+                      <div className="text-[10px] font-bold text-amber-300 line-clamp-2 pl-3.5 mt-0.5">
+                        {broadcastResult}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 場上卡牌展示 */}
+                  <div className="w-full flex-1 flex items-center justify-center relative z-10">
+                    {playedCardArena ? (
+                      <div key={playedCardArena.id} className="relative group animate-card-play scale-[0.85] origin-center -my-2">
+                        <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 to-red-600 rounded-2xl blur-md opacity-75 transition duration-1000"></div>
+                        <div className="relative w-48 h-64 bg-slate-900 border-2 border-amber-400 rounded-xl p-3 flex flex-col justify-between shadow-2xl overflow-hidden">
+                          <div className="flex justify-between items-start">
+                            <span className="bg-amber-500 text-slate-950 text-base font-black w-8 h-8 rounded-full flex items-center justify-center shadow font-mono">{playedCardArena.value}</span>
+                            <span className="text-[10px] bg-slate-800 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">{playedCardArena.category}</span>
+                          </div>
+                          <div className="w-full h-24 my-1 rounded-lg bg-slate-800 border border-slate-700/70 flex items-center justify-center relative overflow-hidden">
+                            <i className={`fa-solid ${playedCardArena.icon} text-5xl text-amber-400/80 filter drop-shadow`}></i>
+                          </div>
+                          <div className="text-center">
+                            <h3 className="text-base font-black text-amber-300 tracking-wide">{playedCardArena.title}</h3>
+                            <p className="text-[10px] text-slate-300 line-clamp-2 mt-0.5 leading-tight">{playedCardArena.desc}</p>
+                          </div>
+                          <div className="pt-1.5 border-t border-amber-500/40 flex justify-between items-center text-[10px] mt-0.5">
+                            <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                              <i className="fa-solid fa-user-pen text-[9px]"></i> {playedCardArena.isMoon ? '翻開者' : '出牌者'}
+                            </span>
+                            <span className="text-emerald-300 font-black bg-emerald-950/90 px-2 py-0.5 rounded-full border border-emerald-500/60 shadow-sm">
+                              {playedCardArena.playedBy}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-slate-600 text-xs flex flex-col items-center">
+                        <i className="fa-solid fa-wolf-pack-battalion text-4xl mb-2 opacity-30"></i>
+                        等待玩家行動...
+                      </div>
+                    )}
+                  </div>
+                </main>
+
+                {/* D區: 底部手牌與操作區 */}
+                <footer className="h-[30%] min-h-[210px] bg-gradient-to-t from-slate-950 via-slate-900 to-slate-950 border-t border-slate-800 p-2 relative shrink-0 flex items-center justify-center">
+                  
+                  {/* D區左上方：月亮進度與暗牌按鈕 */}
+                  <div className="absolute left-2 top-2 z-30 flex flex-col space-y-1">
+                    <div className="flex items-center space-x-1 bg-slate-900/90 border border-amber-500/40 px-2 py-0.5 rounded-full text-[9.5px] shadow">
+                      <i className="fa-solid fa-moon text-amber-400"></i>
+                      <span className="text-slate-400">月亮</span>
+                      <span className="font-mono text-amber-400 font-bold">{moonPhase}/3</span>
+                    </div>
+
+                    <button 
+                      onClick={() => setIsCenterCardsModalOpen(true)}
+                      className="flex items-center space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 py-0.5 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
+                    >
+                      <i className="fa-solid fa-eye text-amber-400"></i>
+                      <span className="font-bold text-amber-300">暗牌</span>
+                      <span className="font-mono text-amber-400 font-bold ml-0.5">({centerCards.length})</span>
+                    </button>
+                  </div>
+
+                  {/* D區左下：目前「面前」的牌（簡約顯示；絕對定位，不影響版面） */}
+                  {(() => {
+                    const front = getFrontCards(players[0] || { playedCards: [] });
+                    if (front.length === 0) return null;
+                    return (
+                      <div className="absolute left-1.5 bottom-1.5 z-30 flex flex-col-reverse items-start gap-0.5 pointer-events-none max-h-[calc(100%_-_4.25rem)] overflow-hidden">
+                        {front.map((c, i) => (
+                          <span key={(c.id || c.title) + '-' + i} className="text-[8px] leading-none bg-slate-900/75 border border-cyan-500/40 text-cyan-200 px-1 py-[2px] rounded whitespace-nowrap">
+                            <span className="font-mono font-black text-amber-300">{c.value}</span> {c.title}
+                          </span>
+                        ))}
+                        <span className="text-[8px] leading-none text-slate-400">🃏 面前 {front.length}</span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 手牌區：絕對水平居中 */}
+                  <div className="absolute inset-0 flex items-center justify-center px-4 pointer-events-none">
+                    <div className="flex space-x-3 items-center justify-center h-full pointer-events-auto">
+                      {myHand.filter(Boolean).length > 0 ? (
+                        myHand.filter(Boolean).map((card) => {
+                          const isSelected = selectedHandCard?.id === card.id;
+                          return (
+                            <div 
+                              key={card.id}
+                              onClick={() => handleCardClick(card)}
+                              className={`hand-card relative w-[130px] h-[190px] bg-slate-900 border-2 rounded-xl p-2 flex flex-col justify-between shrink-0 cursor-pointer ${
+                                isSelected ? 'selected border-amber-400' : 'border-cyan-500/80 hover:border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className={`${isSelected ? 'bg-amber-500' : 'bg-cyan-500'} text-slate-950 text-sm font-black w-6 h-6 rounded-full flex items-center justify-center font-mono`}>{card.value}</span>
+                                <span className="text-[9px] text-cyan-300 font-bold bg-slate-800/80 px-1.5 py-0.5 rounded border border-cyan-500/30">{card.category}</span>
+                              </div>
+                              <div className="w-full h-16 bg-slate-800/90 rounded-lg border border-slate-700/60 flex items-center justify-center my-1">
+                                <i className={`fa-solid ${card.icon} text-3xl text-cyan-400 filter drop-shadow`}></i>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs font-black text-slate-100 truncate tracking-wide">{card.title}</div>
+                                <div className="text-[8.5px] text-slate-300 line-clamp-2 leading-tight mt-0.5">{card.desc}</div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-slate-500 text-xs">無手牌</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 右側浮動操作按鈕 */}
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 w-[16%] max-w-[70px] h-[90%] flex flex-col justify-center space-y-2 z-20 bg-slate-950/60 backdrop-blur-sm p-1 rounded-xl border border-slate-800/80 shadow-lg">
+                    {myHand.length === 1 && (
+                      <>
+                        <button 
+                          onClick={handleActionA}
+                          disabled={players[currentTurnIndex].isAI || gameOver || actionLocked}
+                          className="w-full group relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 rounded-xl py-2 px-1 transition-all duration-300 active:scale-95 shadow-md flex flex-col items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center mb-0.5 border border-emerald-400/40">
+                            <i className="fa-solid fa-plus text-[10px] text-emerald-400"></i>
+                          </div>
+                          <span className="text-[9.5px] font-black text-emerald-200">抽一打一</span>
+                        </button>
+                        
+                        <button 
+                          onClick={handleActionB}
+                          disabled={centerCards.length === 0 || players[currentTurnIndex].isAI || gameOver || actionLocked}
+                          className="w-full group relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950/40 border border-blue-500/40 hover:border-blue-400 text-blue-300 rounded-xl py-2 px-1 transition-all duration-300 active:scale-95 shadow-md flex flex-col items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center mb-0.5 border border-blue-400/40">
+                            <i className="fa-solid fa-hand-pointer text-[10px] text-blue-400"></i>
+                          </div>
+                          <span className="text-[9.5px] font-black text-blue-200">拿一還一</span>
+                        </button>
+                      </>
+                    )}
+
+                    {myHand.length === 2 && (
+                      <div className="flex flex-col space-y-2">
+                        <button 
+                          onClick={handleConfirmPlay}
+                          disabled={!selectedHandCard || players[currentTurnIndex].isAI || gameOver || actionLocked}
+                          className={`w-full group relative overflow-hidden rounded-xl py-2.5 px-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center ${
+                            selectedHandCard && !players[currentTurnIndex].isAI
+                              ? 'bg-gradient-to-b from-amber-400 via-amber-500 to-amber-600 border border-amber-300 text-slate-950 shadow-md cursor-pointer'
+                              : 'bg-slate-900/90 border border-amber-500/30 text-amber-500/40 opacity-50 cursor-not-allowed'
+                          }`}
+                        >
+                          <div className="w-5 h-5 rounded-full bg-slate-950/20 flex items-center justify-center mb-0.5">
+                            <i className="fa-solid fa-check text-[10px]"></i>
+                          </div>
+                          <span className="text-[9.5px] font-black">
+                            {isReturningCenterCard ? '放回暗牌' : '確定出牌'}
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </footer>
+              </div>
+
+              {/* 互動彈窗: 人類玩家發動能力標的與數值選擇 */}
+              {interactionModal && (
+                <InteractionDialog 
+                  modal={interactionModal} 
+                  players={players} 
+                  playerHands={playerHands}
+                  centerCards={centerCards}
+                  onSubmit={handleHumanInteractionSubmit}
+                  onCancel={() => { 
+                    // 取消時：收回剛才準備打出的牌，完全不執行效果並還原至兩張手牌狀態
+                    if (interactionModal.type === 'COUNTER_SPY') {
+                      const m = interactionModal;
+                      setInteractionModal(null);
+                      executeGuess(m.sourceId, m.targetId, m.guessedValue, m.isAssassin, true, m.secondGuess);
+                      return;
+                    }
+                    if (interactionModal.type === 'SERVANT_CHOICE') { setInteractionModal(null); proceedToNext(); return; }
+                    if (interactionModal.type === 'INFO') { setInteractionModal(null); advanceTurn(); return; }
+                    const playedCard = interactionModal.card;
+                    lockRef.current = false;
+                    setActionLocked(false);
+                    setInteractionModal(null);
+                    if (playedCard) {
+                      setPlayerHands(prev => {
+                        const currentHand = prev[0] || [];
+                        if (!currentHand.some(c => c?.id === playedCard.id)) {
+                          return { ...prev, 0: [...currentHand, playedCard] };
+                        }
+                        return prev;
+                      });
+                      // 移除面前剛剛宣告打出的卡牌展示
+                      setPlayers(prev => prev.map(p => p.id === 0 ? { ...p, playedCards: (p.playedCards || []).filter(c => c?.id !== playedCard.id) } : p));
+                      setPlayedCardArena(null);
+                    }
+                    setSelectedHandCard(null);
+                    setBroadcastAction('已取消發動能力');
+                    setBroadcastResult('➔ 請重新選擇要打出的手牌');
+                  }}
+                />
+              )}
+
+              {/* 遊戲結束勝利彈窗 */}
+              {gameOver && winnerInfo && (
+                <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+                  <div className="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-400/80 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center relative overflow-hidden">
+                    <i className="fa-solid fa-trophy text-5xl text-amber-400 mb-3 filter drop-shadow"></i>
+                    <h2 className="text-xl font-black text-amber-300 mb-1">【{winnerInfo.winnerName}】</h2>
+                    <p className="text-xs text-emerald-300 font-bold mb-3">{winnerInfo.reason}</p>
+                    {winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0 && (
+                      <p className="text-[11px] text-amber-300 font-black mb-3"><i className="fa-solid fa-moon mr-1"></i>【{winnerInfo.matchWinners.join(' & ')}】累計 2 勝，贏得整場！</p>
+                    )}
+                    <button
+                      onClick={() => setIsHistoryModalOpen(true)}
+                      className="w-full mb-2 bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold text-xs py-2 rounded-xl border border-purple-500/40 active:scale-95 transition"
+                    >
+                      <i className="fa-solid fa-clock-rotate-left mr-1"></i>查看記錄
+                    </button>
+                    <button 
+                      onClick={() => { if (winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) { winsRef.current = {}; setWins({}); } initGame(); }} 
+                      className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-sm py-2.5 rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition"
+                    >
+                      {winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0 ? '開始新的一場' : '下一局'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 彈窗 1：牌庫角色清單 */}
+              {isDeckModalOpen && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                      <div className="flex items-center space-x-2">
+                        <i className="fa-solid fa-layer-group text-cyan-400"></i>
+                        <h3 className="text-sm font-bold text-cyan-300">牌庫角色清單</h3>
+                      </div>
+                      <button onClick={() => setIsDeckModalOpen(false)} className="text-slate-400 hover:text-white text-base">
+                        <i className="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1 text-xs scrollbar-none">
+                      {ALL_CARDS.map((card, idx) => {
+                        const counts = remainingCounts[card.title] || { current: card.totalCount, total: card.totalCount };
+                        const isUsedUp = counts.current === 0;
+                        return (
+                          <div key={idx} className={`flex justify-between items-center p-1.5 rounded ${isUsedUp ? 'bg-red-950/30 opacity-50' : 'bg-slate-800/50'}`}>
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-mono ${isUsedUp ? 'bg-red-900 text-red-300' : 'bg-slate-700 text-slate-300'}`}>{card.value}</span>
+                              <span className={`font-bold ${isUsedUp ? 'text-red-400 line-through' : 'text-slate-200'}`}>{card.title}</span>
+                            </div>
+                            <span className={`font-mono font-bold ${isUsedUp ? 'text-red-500' : 'text-cyan-400'}`}>
+                              {counts.current} / {counts.total}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button onClick={() => setIsDeckModalOpen(false)} className="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs py-2 rounded-xl border border-slate-700 transition">
+                      關閉
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 彈窗 2：歷史紀錄 */}
+              {isHistoryModalOpen && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-slate-900 border border-purple-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                      <div className="flex items-center space-x-2">
+                        <i className="fa-solid fa-clock-rotate-left text-purple-400"></i>
+                        <h3 className="text-sm font-bold text-purple-300">行動紀錄</h3>
+                      </div>
+                      <button onClick={() => setIsHistoryModalOpen(false)} className="text-slate-400 hover:text-white text-base">
+                        <i className="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                    <div className="history-scroll space-y-2 pr-1 text-xs scrollbar-none">
+                      {historyLogs.length > 0 ? historyLogs.map(log => (
+                        <div key={log.id} className="bg-slate-800/60 border-l-2 border-purple-400 p-2 rounded flex flex-col">
+                          <div className="text-[10px] text-purple-300 font-bold">{log.player}</div>
+                          <div className="text-slate-200 font-semibold">{log.card}</div>
+                        </div>
+                      )) : (
+                        <div className="text-center text-slate-500 py-4">尚無紀錄</div>
+                      )}
+                    </div>
+                    <button onClick={() => setIsHistoryModalOpen(false)} className="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs py-2 rounded-xl border border-slate-700 transition">
+                      關閉
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 彈窗：玩家面前的牌 */}
+              {viewPlayerId !== null && (() => {
+                const vp = players.find(p => p.id === viewPlayerId);
+                if (!vp) return null;
+                const cards = getFrontCards(vp);
+                const isTarget = witchTargetOwner && witchTargetOwner.targetId === vp.id;
+                const isOwner = witchTargetOwner && witchTargetOwner.witchOwnerId === vp.id;
+                const ownerName = witchTargetOwner ? (players.find(p => p.id === witchTargetOwner.witchOwnerId) || {}).name : '';
+                const targetName = witchTargetOwner ? (players.find(p => p.id === witchTargetOwner.targetId) || {}).name : '';
+                return (
+                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewPlayerId(null)}>
+                    <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
+                        <h3 className="text-sm font-bold text-cyan-300">{vp.name} 面前的牌</h3>
+                        <button onClick={() => setViewPlayerId(null)} className="text-slate-400 hover:text-white text-base"><i className="fa-solid fa-xmark"></i></button>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mb-3 text-[10px] font-bold">
+                        <span className={`px-1.5 py-0.5 rounded border ${vp.status === '存活' ? 'border-emerald-500/60 text-emerald-300' : 'border-slate-600 text-slate-400'}`}>{vp.status}</span>
+                        {vp.protected && vp.status === '存活' && <span className="px-1.5 py-0.5 rounded border border-cyan-400 text-cyan-300"><i className="fa-solid fa-shield-halved mr-1"></i>守護中</span>}
+                        {isTarget && <span className="px-1.5 py-0.5 rounded border border-purple-400 text-purple-300"><i className="fa-solid fa-hat-wizard mr-1"></i>女巫復活（與 {ownerName} 共同勝利）</span>}
+                        {isOwner && <span className="px-1.5 py-0.5 rounded border border-pink-400 text-pink-300"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i>女巫持有者（綁定 {targetName}）</span>}
+                      </div>
+                      <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 scrollbar-none">
+                        {cards.length > 0 ? cards.map((c, i) => (
+                          <div key={(c.id || c.title) + '-' + i} className="bg-slate-800/60 border border-slate-700 rounded-lg p-2 flex items-start space-x-2">
+                            <span className="bg-amber-500 text-slate-950 text-sm font-black w-7 h-7 rounded-full flex items-center justify-center shrink-0 font-mono">{c.value}</span>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-amber-300">{c.title} <span className="text-[10px] text-slate-400 font-normal">{c.category}</span>{c.revealedBy === 'BOUNTY' && <span className="text-[10px] text-rose-300 ml-1">賞金獵人公開</span>}</div>
+                              <div className="text-[10px] text-slate-300 leading-snug">{c.desc}</div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-center text-slate-500 text-xs py-4">面前沒有牌</div>
+                        )}
+                      </div>
+                      <button onClick={() => setViewPlayerId(null)} className="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs py-2 rounded-xl border border-slate-700 transition">關閉</button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 彈窗 3：暗牌區檢視 */}
+              {isCenterCardsModalOpen && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-slate-900 border border-amber-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                      <div className="flex items-center space-x-2">
+                        <i className="fa-solid fa-dragon text-amber-400"></i>
+                        <h3 className="text-sm font-bold text-amber-300">桌面暗牌區</h3>
+                      </div>
+                      <button onClick={() => setIsCenterCardsModalOpen(false)} className="text-slate-400 hover:text-white text-base">
+                        <i className="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                    
+                    <div className="py-3 flex justify-center space-x-3">
+                      {centerCards.length > 0 ? (
+                        centerCards.filter(Boolean).map((card, i) => (
+                          <div key={card.id || i} className="w-16 h-24 bg-slate-800 border-2 border-slate-600 rounded-lg shadow-lg flex flex-col items-center justify-center relative overflow-hidden transition-transform hover:scale-105">
+                            <i className="fa-solid fa-dragon text-amber-500/80 text-xl mb-1 filter drop-shadow"></i>
+                            <span className="text-[9px] text-amber-300 font-bold z-10">暗牌 {i+1}</span>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-slate-500 text-xs py-4">桌面無暗牌</div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 text-center mb-3">使用「拿一還一」可取得第一張暗牌。</p>
+
+                    <button onClick={() => setIsCenterCardsModalOpen(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs py-2 rounded-xl border border-slate-700 transition">
+                      關閉
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          );
+        }
+
+        // 互動對話框組件
+        function InteractionDialog({ modal, players, playerHands, centerCards, onSubmit, onCancel }) {
+          const [selectedTarget, setSelectedTarget] = useState('');
+          const [secondaryTarget, setSecondaryTarget] = useState('');
+          const [guessedVal, setGuessedVal] = useState('0');
+          const [guessedVal2, setGuessedVal2] = useState('1');
+          const [selectedStolenCard, setSelectedStolenCard] = useState('');
+          const [selectedKeepCard, setSelectedKeepCard] = useState('');
+
+          const aliveTargets = players.filter(p => p.id !== 0 && p.status === '存活' && !p.protected);
+          const deadTargets = players.filter(p => p.status === '出局');
+
+          const isGuess = modal.type === 'VILLAGER' || modal.type === 'ASSASSIN';
+
+          // 掘墓人選定的玩家面前可奪取卡牌
+          const gravediggerTarget = players.find(p => p.id.toString() === selectedTarget);
+          const availableStolenCards = gravediggerTarget ? gravediggerTarget.playedCards.filter(c => c && c.type !== 'WEREWOLF') : [];
+
+          // 守夜人可選擇的卡牌組合 (手牌 + 中央暗牌)
+          const watchmanHand = playerHands[0] || [];
+          const watchmanOptions = [...centerCards, ...watchmanHand].filter(Boolean);
+
+          return (
+            <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
+                <h3 className="text-sm font-bold text-emerald-300 border-b border-slate-800 pb-2 mb-3">
+                  {modal.title || ('選擇【' + (modal.card ? modal.card.title : '能力') + '】目標')}
+                </h3>
+
+                {modal.type === 'INFO' ? (
+                  <div>
+                    <p className="text-xs text-slate-300 mb-4 whitespace-pre-line">{modal.message}</p>
+                    <button onClick={onCancel} className="w-full bg-emerald-600 text-white text-xs py-2 rounded-xl font-bold">確定</button>
+                  </div>
+                ) : modal.type === 'SERVANT_CHOICE' ? (
+                  <div>
+                    <p className="text-xs text-slate-300 mb-4">回合結束，是否棄掉面前的【僕人】立刻進行額外回合？</p>
+                    <div className="flex space-x-2">
+                      <button onClick={() => onSubmit({ type: 'SERVANT_CHOICE', servantId: modal.servantId })} className="flex-1 bg-emerald-600 text-white text-xs py-2 rounded-xl font-bold">棄掉並額外回合</button>
+                      <button onClick={onCancel} className="flex-1 bg-slate-800 text-slate-300 text-xs py-2 rounded-xl">不使用</button>
+                    </div>
+                  </div>
+                ) : modal.type === 'COUNTER_SPY' ? (
+                  <div>
+                    <p className="text-xs text-slate-300 mb-4">其他人猜測您的手牌失敗！是否立刻打出【間諜】反殺該猜測者？</p>
+                    <div className="flex space-x-2">
+                      <button onClick={() => onSubmit({ type: 'COUNTER_SPY', attackerId: modal.sourceId })} className="flex-1 bg-emerald-600 text-white text-xs py-2 rounded-xl font-bold">反殺打出</button>
+                      <button onClick={onCancel} className="flex-1 bg-slate-800 text-slate-300 text-xs py-2 rounded-xl">放棄</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-xs">
+                    {/* 守夜人卡牌選擇 */}
+                    {modal.type === 'NIGHT_WATCHMAN' ? (
+                      <div>
+                        <label className="block text-slate-400 mb-1">從手牌與中央暗牌中選擇 1 張保留：</label>
+                        <select value={selectedKeepCard} onChange={e => setSelectedKeepCard(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                          <option value="">-- 請選擇保留卡牌 --</option>
+                          {watchmanOptions.map(c => <option key={c.id} value={c.id}>({c.value}) {c.title}</option>)}
+                        </select>
+                      </div>
+                    ) : modal.type === 'GRAVEDIGGER' ? (
+                      <>
+                        <div>
+                          <label className="block text-slate-400 mb-1">選擇目標玩家：</label>
+                          <select value={selectedTarget} onChange={e => { setSelectedTarget(e.target.value); setSelectedStolenCard(''); }} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                            <option value="">-- 請選擇玩家 --</option>
+                            {players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(c => c && c.type !== 'WEREWOLF')).map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {selectedTarget && (
+                          <div>
+                            <label className="block text-slate-400 mb-1">選擇欲奪取之卡牌：</label>
+                            <select value={selectedStolenCard} onChange={e => setSelectedStolenCard(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                              <option value="">-- 請選擇卡牌 --</option>
+                              {availableStolenCards.map(c => <option key={c.id} value={c.id}>({c.value}) {c.title}</option>)}
+                            </select>
+                          </div>
+                        )}
+                      </>
+                    ) : modal.type === 'WITCH' ? (
+                      <div>
+                        <label className="block text-slate-400 mb-1">選擇復活玩家：</label>
+                        <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                          <option value="">-- 請選擇 --</option>
+                          {deadTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                    ) : modal.type === 'PICKPOCKET' ? (
+                      <>
+                        <div>
+                          <label className="block text-slate-400 mb-1">選擇目標玩家 1：</label>
+                          <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                            <option value="">-- 請選擇 --</option>
+                            {aliveTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 mb-1">選擇目標玩家 2：</label>
+                          <select value={secondaryTarget} onChange={e => setSecondaryTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                            <option value="">-- 請選擇 --</option>
+                            {aliveTargets.filter(p => p.id.toString() !== selectedTarget).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <label className="block text-slate-400 mb-1">選擇對手目標：</label>
+                        <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
+                          <option value="">-- 請選擇 --</option>
+                          {aliveTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* 猜測數值選擇 */}
+                    {isGuess && (
+                      <div>
+                        <label className="block text-slate-400 mb-1">{modal.type === 'ASSASSIN' ? '第 1 次猜測數值 (0–10)：' : '宣告手牌數值 (0–10)：'}</label>
+                        <select value={guessedVal} onChange={e => { const v = e.target.value; setGuessedVal(v); if (v === guessedVal2) setGuessedVal2(v === '0' ? '1' : '0'); }} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-amber-300 font-bold">
+                          {[...Array(11).keys()].map(v => <option key={v} value={v}>數值 {v}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {modal.type === 'ASSASSIN' && (
+                      <div>
+                        <label className="block text-slate-400 mb-1">第 2 次猜測數值 (0–10，同一目標)：</label>
+                        <select value={guessedVal2} onChange={e => setGuessedVal2(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-amber-300 font-bold">
+                          {[...Array(11).keys()].filter(v => v.toString() !== guessedVal).map(v => <option key={v} value={v}>數值 {v}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="flex space-x-2 pt-2">
+                      <button 
+                        disabled={
+                          modal.type === 'NIGHT_WATCHMAN' ? !selectedKeepCard :
+                          modal.type === 'GRAVEDIGGER' ? (!selectedTarget || !selectedStolenCard) :
+                          modal.type === 'PICKPOCKET' ? (!selectedTarget || !secondaryTarget) :
+                          !selectedTarget
+                        }
+                        onClick={() => onSubmit({ 
+                          type: modal.type, 
+                          targetId: parseInt(selectedTarget), 
+                          secondaryTargetId: parseInt(secondaryTarget), 
+                          guessedValue: guessedVal,
+                          guessedValue2: guessedVal2,
+                          stolenCardId: selectedStolenCard,
+                          keepCardId: selectedKeepCard
+                        })} 
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold py-2 rounded-xl"
+                      >
+                        確認發動
+                      </button>
+                      <button onClick={onCancel} className="bg-slate-800 text-slate-300 px-3 py-2 rounded-xl">取消</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
