@@ -266,6 +266,8 @@
             const rm = /[（(]([^）)]+)[）)]/.exec(res);
             fx.lasting = ['僕人', '商人', '煉金術士'].includes(meta.title);
             if (meta.title === '僕人') fx.reason = '待命：回合結束時可棄掉，換額外回合';
+            else if (meta.title === '煉金術士') fx.reason = '被淘汰才會發動';
+            else if (meta.title === '陰謀家') fx.reason = '手握此牌被淘汰時才會發動';
             else if (meta.type === 'PASSIVE') fx.reason = '被動牌・結算時才啟動';
             else { fx.noEffect = true; fx.reason = rm ? rm[1] : res.replace(/^[➔\s]+/, '').replace(/^(沒有任何效果|無任何效果)[：:\s]*/, '').slice(0, 30); }
           }
@@ -815,7 +817,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.0 M');
+          const [version] = useState('v0.0.1 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -1123,9 +1125,9 @@
             // 不另開一筆紀錄：把「公開手牌」放在剛才那筆牌效結果的下一行（另一種顏色），並亮紅燈
             const handText = targetHand.length ? targetHand.map(c => `(${c.value})【${c.title}】`).join('、') : '無';
             const revealText = `${target.name} 公開手牌：${handText}`;
-            setBroadcastReveal(prev => prev ? `${prev}｜${revealText}` : revealText);
+            setBroadcastReveal(prev => prev && prev.includes(revealText) ? prev : (prev ? `${prev}｜${revealText}` : revealText));
             setBroadcastEvent({ type: 'out', key: `${Date.now()}-${Math.random()}` });
-            setHistoryLogs(prev => prev.length ? [{ ...prev[0], reveal: prev[0].reveal ? `${prev[0].reveal}｜${revealText}` : revealText, event: 'out' }, ...prev.slice(1)] : prev);
+            setHistoryLogs(prev => prev.length ? [{ ...prev[0], reveal: prev[0].reveal && prev[0].reveal.includes(revealText) ? prev[0].reveal : (prev[0].reveal ? `${prev[0].reveal}｜${revealText}` : revealText), event: 'out' }, ...prev.slice(1)] : prev);
 
             if (killerId !== null && killerId !== targetId && targetHand.some(c => c.title === '陰謀家')) {
               const killer = st.players.find(p => p.id === killerId);
@@ -1325,6 +1327,54 @@
               setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '你', card: msg }, ...prev]);
             }
             return finalDrawnCard;
+          };
+
+
+          // 賞金獵人：目標先公開原手牌放在面前，再重抽 1 張。
+          // 公開的牌若是市長／狼人 ➔ 目標立刻出局（不再重抽）；若是吸血鬼且面前已有 2 張 7 以上 ➔ 目標獲勝。
+          // 先寫「賞金獵人」那筆紀錄，再抽牌，這樣重抽時翻出的月亮牌與遊戲結束會排在後面。
+          const resolveBounty = (actionText, logName, sourceId, targetId) => {
+            const st = stateRef.current;
+            const target = st.players.find(p => p.id === targetId);
+            if (!target) { advanceTurn(); return; }
+            const oldHand = ((st.playerHands[targetId] || []).filter(Boolean))[0] || null;
+            const revealText = oldHand ? `${target.name} 公開手牌：(${oldHand.value})【${oldHand.title}】` : '';
+            const markRevealed = () => {
+              if (oldHand) setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...p.playedCards.filter(c => !(c && c.id === oldHand.id)), { ...oldHand, revealedBy: 'BOUNTY' }] } : p));
+            };
+
+            if (oldHand && (oldHand.type === 'MAYOR' || oldHand.type === 'WEREWOLF')) {
+              logActionAndResult(actionText, `強制公開手牌，面前放了${oldHand.title} ➔ ${target.name} 出局！`, logName, null, revealText);
+              eliminatePlayer(targetId, sourceId, '賞金獵人公開市長/狼人出局');
+              setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: p.playedCards.map(c => c && c.id === oldHand.id ? { ...c, revealedBy: 'BOUNTY' } : c) } : p));
+              advanceTurn();
+              return;
+            }
+            if (oldHand && oldHand.type === 'VAMPIRE' && (target.playedCards || []).filter(c => c && c.value >= 7).length >= 2) {
+              markRevealed();
+              logActionAndResult(actionText, '強制公開手牌，面前高階牌足夠', logName, null, revealText);
+              triggerVictory(target, '賞金獵人觸發吸血鬼降臨勝利！');
+              return;
+            }
+
+            // 預看重抽結果（不改狀態），只為了把「你 取得…」寫進這筆紀錄
+            let preview;
+            { let phase = st.moonPhase; const dk = st.deck; preview = undefined;
+              for (let i = dk.length - 1; i >= 0; i--) {
+                const c = dk[i];
+                if (c.isMoon) {
+                  phase += 1;
+                  if (phase >= 3 && st.players.some(p => p.status === '存活' && (st.playerHands[p.id] || []).some(h => h && h.title === '狼人'))) { preview = null; break; }
+                } else { preview = c; break; }
+              } }
+            const previewCard = preview === undefined ? st.reserveCards[0] : preview;
+            markRevealed();
+            logActionAndResult(actionText, `強制重抽${targetId === 0 && previewCard ? gotCardsText([previewCard]) : ''}`, logName, null, revealText);
+
+            const drawn = drawCardForPlayer(targetId, false);
+            if (gameOverRef.current) return;
+            setHandNow(targetId, [drawn || stateRef.current.reserveCards[0]]);
+            advanceTurn();
           };
 
           const handleActionA = () => {
@@ -1557,10 +1607,12 @@
                 break;
               }
 
-              default:
-                logActionAndResult(`${source.name} 打出了(${card.value})【${card.title}】`, '無任何效果', source.name);
+              default: {
+                const passiveWhy = card.title === '煉金術士' ? '被淘汰才會發動' : (card.title === '陰謀家' ? '手握此牌被淘汰時才會發動' : '');
+                logActionAndResult(`${source.name} 打出了(${card.value})【${card.title}】`, passiveWhy ? `沒有任何效果（${passiveWhy}）` : '無任何效果', source.name);
                 advanceTurn();
                 break;
+              }
             }
           };
 
@@ -1632,25 +1684,7 @@
 
             switch (card.type) {
               case 'BOUNTY_HUNTER': {
-                let newDrawn = drawCardForPlayer(randomTarget.id, false) || reserveCards[0];
-                
-                const targetOldHand = (playerHands[randomTarget.id] || [])[0];
-                if (targetOldHand) setPlayers(prev => prev.map(p => p.id === randomTarget.id ? { ...p, playedCards: [...p.playedCards, { ...targetOldHand, revealedBy: 'BOUNTY' }] } : p));
-                setHandNow(randomTarget.id, [newDrawn]);
-                
-                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【賞金獵人】`, `強制重抽${randomTarget.id === 0 ? gotCardsText([newDrawn]) : ''}`, sourcePlayer.name, null, targetOldHand ? `${randomTarget.name} 公開手牌：(${targetOldHand.value})【${targetOldHand.title}】` : '');
-                
-                if (newDrawn.type === 'MAYOR' || newDrawn.type === 'WEREWOLF') {
-                  logActionAndResult(`${randomTarget.name} 重抽至【${newDrawn.title}】`, `觸發死罪 ➔ ${randomTarget.name} 出局！`, randomTarget.name);
-                  eliminatePlayer(randomTarget.id, sourceId, '賞金獵人抽中市長/狼人出局');
-                } else if (newDrawn.type === 'VAMPIRE') {
-                  const targetHighCards = (randomTarget.playedCards || []).filter(c => c && c.value >= 7);
-                  if (targetHighCards.length >= 2) {
-                    triggerVictory(randomTarget, '賞金獵人觸發吸血鬼降臨勝利！');
-                    return;
-                  }
-                }
-                advanceTurn();
+                resolveBounty(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【賞金獵人】`, sourcePlayer.name, sourceId, randomTarget.id);
                 break;
               }
               case 'VILLAGER':
@@ -1837,24 +1871,7 @@
                 advanceTurn();
               }
             } else if (type === 'BOUNTY_HUNTER') {
-              let newDrawn = drawCardForPlayer(targetId, false) || reserveCards[0];
-              
-              const targetOldHand = (playerHands[targetId] || [])[0];
-              if (targetOldHand) setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...p.playedCards, { ...targetOldHand, revealedBy: 'BOUNTY' }] } : p));
-              setHandNow(targetId, [newDrawn]);
-              logActionAndResult(`你 對 ${targetId === 0 ? '自己' : target.name} 打出了(5)【賞金獵人】`, `強制重抽${targetId === 0 ? gotCardsText([newDrawn]) : ''}`, '你', null, targetOldHand ? `${target.name} 公開手牌：(${targetOldHand.value})【${targetOldHand.title}】` : '');
-
-              if (newDrawn.type === 'MAYOR' || newDrawn.type === 'WEREWOLF') {
-                logActionAndResult(`${target.name} 重抽至【${newDrawn.title}】`, `觸發死罪 ➔ ${target.name} 出局！`, target.name);
-                eliminatePlayer(targetId, 0, '賞金獵人抽中市長/狼人出局');
-              } else if (newDrawn.type === 'VAMPIRE') {
-                const targetHighCards = (target.playedCards || []).filter(c => c && c.value >= 7);
-                if (targetHighCards.length >= 2) {
-                  triggerVictory(target, '賞金獵人觸發吸血鬼降臨勝利！');
-                  return;
-                }
-              }
-              advanceTurn();
+              resolveBounty(`你 對 ${targetId === 0 ? '自己' : target.name} 打出了(5)【賞金獵人】`, '你', 0, targetId);
             } else if (type === 'SEER') {
               const targetHand = playerHands[targetId] || [];
               const cName = targetHand[0] ? targetHand[0].title : '無';
