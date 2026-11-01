@@ -1113,7 +1113,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.13 M');
+          const [version] = useState('v0.0.14 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -1169,7 +1169,6 @@
           const [turnTick, setTurnTick] = useState(0);
           const [actionLocked, setActionLocked] = useState(false);
           const lockRef = useRef(false);
-          const [aiPaused, setAiPaused] = useState(false);
           const [seerSeen, setSeerSeen] = useState(null); // 先知看過的 { targetId, card }（只有玩家自己看得到）
           // 速度：1＝正常，0.5＝放慢（AI 等待、月亮停留、效果動畫都按倍數拉長）；再點一次同一顆回到 1x
           const [speed, setSpeed] = useState(1);
@@ -1197,6 +1196,10 @@
           const winsRef = useRef({});
           const takenCardRef = useRef(null);
           const takenSlotRef = useRef(null);
+          const reserveDrawRef = useRef(null); // 牌庫最後一張月亮牌翻開後，欠一次「從備用牌抽」的玩家 id
+          const longPressRef = useRef(null); // 手牌長按計時器
+          const lastTapRef = useRef(null);   // 雙點出牌：上一次點的手牌與時間
+          const [zoomCard, setZoomCard] = useState(null); // 長按放大顯示的手牌
           const dragRef = useRef(null);   // 手牌拖曳中的資料
           const arenaRef = useRef(null);  // C 區（放開即出牌的區域）
           const [dragGhost, setDragGhost] = useState(null);
@@ -1418,6 +1421,8 @@
             setWinnerInfo(null);
             gameOverRef.current = false;
             lockRef.current = false;
+            reserveDrawRef.current = null;
+            setZoomCard(null);
             setActionLocked(false);
             setPlayedCardArena(null);
             clearTimeout(fxTimerRef.current);
@@ -1535,7 +1540,7 @@
               triggerVictory(null, '同歸於盡：無人獲勝！');
               return true;
             }
-            if (isDeckEmpty || st.deck.length === 0) {
+            if ((isDeckEmpty || st.deck.length === 0) && reserveDrawRef.current === null) {
               resolveDeckEmptyVictory(alivePlayers);
               return true;
             }
@@ -1687,7 +1692,23 @@
             setPlayedCardArena(moonArenaCard(drawn, drawer.name, phase));
             logActionAndResult(`${drawer.name} 翻開【${drawn.title}】`, `月亮 ${phase}/3 ➔ 繼續抽牌`, drawer.name);
             if (phase >= 3 && checkWerewolfMoonWin()) return { card: null, moon: drawn, gameEnded: true };
+            // 牌庫最後一張是月亮牌：不立刻結算，翻開者本回合的「抽一打一」改從備用牌抽，該回合結束後才結算
+            if (tempDeck.length === 0) reserveDrawRef.current = playerId;
             return { card: null, moon: drawn };
+          };
+
+          // 從備用牌隨機抽 1 張（抽出後從備用牌堆移除）；同時結束「欠一次備用牌」的狀態
+          const drawReserveCard = () => {
+            const st = stateRef.current;
+            reserveDrawRef.current = null;
+            const avail = st.reserveCards.map((c, i) => c ? i : -1).filter(i => i >= 0);
+            if (avail.length === 0) return null;
+            const idx = avail[Math.floor(Math.random() * avail.length)];
+            const card = st.reserveCards[idx];
+            const next = st.reserveCards.filter((_, i) => i !== idx);
+            stateRef.current.reserveCards = next;
+            setReserveCards(next);
+            return card;
           };
 
           const drawCardForPlayer = (playerId, grantExtra = true) => {
@@ -1796,7 +1817,21 @@
             if (fx && fx.kind === 'moon') return; // 月亮動畫播放中（點一下可略過）
             if (gameOver || players[currentTurnIndex].isAI) return;
             const currentHand = playerHands[0] || [];
-            if (currentHand.length >= 2 || deck.length === 0) return;
+            const owesReserve = reserveDrawRef.current === 0 && deck.length === 0;
+            if (currentHand.length >= 2 || (deck.length === 0 && !owesReserve)) return;
+
+            if (owesReserve) {
+              // 牌庫最後一張月亮翻開後：抽一打一改從備用牌隨機抽 1 張
+              const rc = drawReserveCard();
+              if (rc) {
+                setPlayerHands(prev => ({ ...prev, 0: [...currentHand, rc] }));
+                playDrawAnim(rc, 'deck', 2);
+                logActionAndResult('你 執行【抽一打一】', `牌庫已空，從備用牌抽到(${rc.value})【${rc.title}】`, '你');
+              } else {
+                advanceTurn();
+              }
+              return;
+            }
 
             const result = drawTurnCard(0);
             if (result.card) {
@@ -1805,7 +1840,7 @@
               logActionAndResult('你 執行【抽一打一】', `抽到(${result.card.value})【${result.card.title}】`, '你');
             } else if (result.moon) {
               // 月亮牌已打出：仍只有 1 張手牌，可再選「抽一打一」或「拿一還一」
-              if (!gameOverRef.current) setBroadcastResult(`➔ 月亮 ${stateRef.current.moonPhase}/3，請繼續【抽一打一】或【拿一還一】`);
+              if (!gameOverRef.current) setBroadcastResult(`➔ 月亮 ${stateRef.current.moonPhase}/3，請繼續【抽一打一】${reserveDrawRef.current === 0 ? '（牌庫已空，將從備用牌抽）' : ''}或【拿一還一】`);
             } else if (!gameOverRef.current) {
               advanceTurn();
             }
@@ -1873,17 +1908,29 @@
             const r = el.getBoundingClientRect();
             return x >= r.left - 8 && x <= r.right + 8 && y >= r.top - 8 && y <= r.bottom + 8;
           };
+          const clearLongPress = () => {
+            if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null; }
+          };
           const handleHandPointerDown = (e, card) => {
             if (drawAnim) clearDrawAnim();
             if (e.pointerType === 'mouse' && e.button !== 0) return;
-            dragRef.current = { cardId: card.id, startX: e.clientX, startY: e.clientY, moved: false, pointerId: e.pointerId };
+            dragRef.current = { cardId: card.id, startX: e.clientX, startY: e.clientY, moved: false, zoomed: false, pointerId: e.pointerId };
             try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+            // 長按約 0.45 秒（期間沒有拖動）➔ 顯示放大的手牌，放開即關閉
+            clearLongPress();
+            longPressRef.current = setTimeout(() => {
+              longPressRef.current = null;
+              const d = dragRef.current;
+              if (d && !d.moved) { d.zoomed = true; setZoomCard(card); }
+            }, 450);
           };
           const handleHandPointerMove = (e) => {
             const d = dragRef.current;
             if (!d || d.pointerId !== e.pointerId) return;
+            if (d.zoomed) return;
             if (!d.moved) {
               if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 10) return;
+              clearLongPress();
               if (!canDragPlay()) return;
               d.moved = true;
             }
@@ -1894,7 +1941,22 @@
           const handleHandPointerUp = (e) => {
             const d = dragRef.current;
             dragRef.current = null;
+            clearLongPress();
             try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+            if (d && d.zoomed) { setZoomCard(null); lastTapRef.current = null; return; }
+            if (d && !d.moved) {
+              // 雙點同一張手牌 ➔ 直接出牌
+              const now = Date.now();
+              const lt = lastTapRef.current;
+              const card = (playerHands[0] || []).find(c => c && c.id === d.cardId);
+              if (lt && lt.cardId === d.cardId && now - lt.time < 380) {
+                lastTapRef.current = null;
+                if (card && canDragPlay()) handleConfirmPlay(card);
+              } else {
+                lastTapRef.current = { cardId: d.cardId, time: now };
+              }
+              return;
+            }
             if (!d || !d.moved) return;
             const card = (playerHands[0] || []).find(c => c && c.id === d.cardId);
             const over = isOverArena(e.clientX, e.clientY);
@@ -1903,6 +1965,8 @@
           };
           const handleHandPointerCancel = () => {
             dragRef.current = null;
+            clearLongPress();
+            setZoomCard(null);
             setDragGhost(null);
           };
 
@@ -2036,6 +2100,11 @@
                   advanceTurn();
                   break;
                 }
+                if (card.type === 'PICKPOCKET' && sourceId === 0 && !stateRef.current.players.some(p => p.id !== 0 && p.status === '存活' && !p.protected)) {
+                  logActionAndResult('你 打出了(6)【扒手】', '沒有任何效果（可選對手不足）', '你');
+                  advanceTurn();
+                  break;
+                }
                 if (sourceId === 0) {
                   setInteractionModal({ type: card.type, card });
                 } else {
@@ -2104,10 +2173,12 @@
             }
 
             if (card.type === 'PICKPOCKET') {
-              if (aliveTargets.length < 2) {
+              // 扒手可指定自己：候選＝所有存活且未受保護的對手＋出牌者自己
+              const pickPool = [sourcePlayer, ...aliveTargets];
+              if (pickPool.length < 2) {
                 logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, '沒有任何效果（可選對手不足）', sourcePlayer.name);
               } else {
-                const [a, b] = shuffle(aliveTargets);
+                const [a, b] = shuffle(pickPool);
                 const aH = playerHands[a.id] || [];
                 const bH = playerHands[b.id] || [];
                 setPlayerHands(prev => ({ ...prev, [a.id]: bH, [b.id]: aH }));
@@ -2382,7 +2453,8 @@
               const t1Hand = playerHands[targetId] || [];
               const t2Hand = playerHands[secondaryTargetId] || [];
               setPlayerHands(prev => ({ ...prev, [targetId]: t2Hand, [secondaryTargetId]: t1Hand }));
-              logActionAndResult(`你 打出了(6)【扒手】`, `秘密交換了 ${t1.name} 與 ${t2.name} 的手牌`, '你');
+              const pickGot = targetId === 0 ? gotCardsText(t2Hand, t1Hand) : (secondaryTargetId === 0 ? gotCardsText(t1Hand, t2Hand) : '');
+              logActionAndResult(`你 打出了(6)【扒手】`, `秘密交換了 ${t1.name} 與 ${t2.name} 的手牌${pickGot}`, '你');
               advanceTurn();
             } else if (type === 'WITCH') {
               const deadTargets = players.filter(p => p.status === '出局');
@@ -2444,6 +2516,7 @@
             // 有效果動畫在播時，等動畫播完再換人
             whenFxDone(() => {
               if (gameOverRef.current) return;
+              reserveDrawRef.current = null; // 回合結束：備用牌抽牌的豁免到此為止，牌庫已空即結算
               if (checkWinConditions()) return;
               const st = stateRef.current;
               const cur = st.players[st.currentTurnIndex];
@@ -2463,7 +2536,7 @@
             if (gameOver) return;
 
             // 僅在遊戲開始且牌庫真為0時檢查結算，防止初始化階段誤觸發
-            if (deck.length === 0 && playerHands[0] && playerHands[0].length > 0) {
+            if (deck.length === 0 && reserveDrawRef.current === null && playerHands[0] && playerHands[0].length > 0) {
               const alivePlayers = players.filter(p => p.status === '存活');
               resolveDeckEmptyVictory(alivePlayers);
               return;
@@ -2505,6 +2578,16 @@
                     continue;
                   }
                   break;
+                }
+
+                if (!drawnCard && hand.length < 2 && reserveDrawRef.current === pid && stateRef.current.deck.length === 0) {
+                  // 牌庫最後一張月亮翻開後，AI 的抽牌改從備用牌隨機抽 1 張
+                  const rc = drawReserveCard();
+                  if (rc) {
+                    const nm = stateRef.current.players.find(p => p.id === pid).name;
+                    logActionAndResult(`${nm} 從備用牌抽牌`, '牌庫已空 ➔ 抽 1 張備用牌', nm);
+                    drawnCard = rc;
+                  }
                 }
 
                 if (drawnCard) {
@@ -2566,16 +2649,6 @@
             <span key={key} className="inline-flex items-center bg-slate-800/50 border border-dashed border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-500 whitespace-nowrap">已取走</span>
           );
 
-          const toggleAiPause = () => {
-            const next = !pausedRef.current;
-            pausedRef.current = next;
-            setAiPaused(next);
-            if (!next && pendingAiRef.current) {
-              pendingAiRef.current = false;
-              setTurnTick(t => t + 1);
-            }
-          };
-
           return (
             <div className="min-h-[100dvh] h-[100dvh] w-screen flex flex-col justify-between overflow-hidden bg-slate-950 text-slate-100 select-none touch-manipulation pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
               
@@ -2593,10 +2666,6 @@
                     {[0.5].map(v => (
                       <button key={v} onClick={() => changeSpeed(v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-mono font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${speed === v ? 'bg-sky-500/25 border-sky-400/80 text-sky-200' : 'bg-slate-800/90 border-slate-500/50 text-slate-400'}`}>{v}x</button>
                     ))}
-                    <button onClick={toggleAiPause} className={`flex items-center justify-center h-6 gap-1 whitespace-nowrap border text-[11px] px-2 rounded-md shadow-sm active:scale-95 ${aiPaused ? 'bg-amber-500/20 border-amber-400/70 text-amber-300' : 'bg-slate-800/90 border-slate-500/50 text-slate-300'}`}>
-                      <i className={`fa-solid ${aiPaused ? 'fa-play' : 'fa-pause'} text-[10px]`}></i>
-                      <span className="font-bold text-[10px]">{aiPaused ? '繼續' : '暫停'}</span>
-                    </button>
                     <button onClick={() => setIsRulesModalOpen(true)} className="flex items-center justify-center h-6 gap-1 whitespace-nowrap bg-slate-800/90 border border-amber-500/40 text-amber-300 text-[11px] px-2 rounded-md shadow-sm active:scale-95">
                       <i className="fa-solid fa-book-open text-amber-400 text-[10px]"></i>
                       <span className="font-bold text-[10px]">規則</span>
@@ -2609,7 +2678,7 @@
                 </header>
 
                 {/* B區: 玩家頭像區 */}
-                <section className="h-[10.5%] min-h-[64px] bg-slate-900/60 border-b border-slate-800/80 px-1.5 py-1.5 flex items-center overflow-x-auto gap-1.5 shrink-0 scrollbar-none">
+                <section className="h-[10.5%] min-h-[64px] bg-slate-900/60 border-b border-slate-800/80 px-1.5 py-1.5 flex items-center overflow-hidden gap-1 shrink-0">
                   {players.map((player, idx) => {
                     const isTurn = currentTurnIndex === idx;
                     const isDead = player.status === '出局';
@@ -2617,7 +2686,7 @@
                       <div 
                         key={player.id}
                         onClick={() => setViewPlayerId(player.id)}
-                        className={`cursor-pointer player-box min-w-[54px] flex-1 bg-slate-800/70 rounded-lg p-1 flex flex-col items-center justify-center relative transition-all duration-300 ${
+                        className={`cursor-pointer player-box min-w-0 basis-0 flex-1 bg-slate-800/70 rounded-lg p-1 flex flex-col items-center justify-center relative transition-all duration-300 ${
                           isTurn ? 'border-2 border-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.65)] scale-[1.02]' : 'border border-slate-700/60 opacity-85'
                         } ${isDead ? 'grayscale opacity-30' : ''}`}
                       >
@@ -2932,7 +3001,7 @@
                           <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center mb-0.5 border border-emerald-400/40">
                             <i className="fa-solid fa-plus text-[10px] text-emerald-400"></i>
                           </div>
-                          <span className="text-[9.5px] font-black text-emerald-200">抽一打一</span>
+                          <span className="text-[9.5px] font-black text-emerald-200">{reserveDrawRef.current === 0 && deck.length === 0 ? '抽備用牌' : '抽一打一'}</span>
                         </button>
                         
                         <button 
@@ -3081,7 +3150,7 @@
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
                       <div className="flex items-center space-x-2">
                         <i className="fa-solid fa-layer-group text-cyan-400"></i>
-                        <h3 className="text-sm font-bold text-cyan-300">牌庫角色清單 - 初始牌庫包含3張月亮牌</h3>
+                        <h3 className="text-sm font-bold text-cyan-300">牌庫清單</h3>
                       </div>
                       <button onClick={() => setIsDeckModalOpen(false)} className="text-slate-400 hover:text-white text-base">
                         <i className="fa-solid fa-xmark"></i>
@@ -3100,6 +3169,23 @@
                             <span className={`font-mono font-bold ${isUsedUp ? 'text-red-500' : 'text-cyan-400'}`}>
                               {counts.current} / {counts.total}
                             </span>
+                          </div>
+                        );
+                      })}
+                      <div className="flex justify-between items-center px-1.5 pt-2 pb-0.5 border-t border-slate-700/70 mt-1">
+                        <span className="text-[11px] font-black text-amber-300"><i className="fa-solid fa-moon mr-1"></i>月亮牌</span>
+                        <span className="font-mono font-bold text-amber-400">剩 {deck.filter(c => c && c.isMoon).length} / 3 張</span>
+                      </div>
+                      {MOON_CARDS.map(m => {
+                        const left = deck.filter(c => c && c.isMoon && c.level === m.level).length;
+                        const used = left === 0;
+                        return (
+                          <div key={m.level} className={`flex justify-between items-center p-1.5 rounded ${used ? 'bg-red-950/30 opacity-50' : 'bg-slate-800/50'}`}>
+                            <div className="flex items-center space-x-2">
+                              <span className={`text-[9px] w-4 h-4 rounded-full flex items-center justify-center ${used ? 'bg-red-900 text-red-300' : 'bg-slate-700 text-amber-300'}`}><i className="fa-solid fa-moon"></i></span>
+                              <span className={`font-bold ${used ? 'text-red-400 line-through' : 'text-slate-200'}`}>{m.title}</span>
+                            </div>
+                            <span className={`font-mono font-bold ${used ? 'text-red-500' : 'text-amber-400'}`}>{left} / 1</span>
                           </div>
                         );
                       })}
@@ -3153,6 +3239,25 @@
                     <button onClick={() => setIsHistoryModalOpen(false)} className="w-full mt-3 shrink-0 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs py-2 rounded-xl border border-slate-700 transition">
                       關閉
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 長按放大的手牌（放開即關閉） */}
+              {zoomCard && (
+                <div className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/70 pointer-events-none">
+                  <div className="w-[250px] h-[360px] bg-slate-900 border-2 border-cyan-400 rounded-2xl p-4 flex flex-col justify-between shadow-[0_0_30px_rgba(6,182,212,0.5)]">
+                    <div className="flex justify-between items-center">
+                      <span className="bg-cyan-500 text-slate-950 text-xl font-black w-10 h-10 rounded-full flex items-center justify-center font-mono">{zoomCard.value}</span>
+                      <span className="text-[11px] text-slate-400 font-bold">{zoomCard.category}</span>
+                    </div>
+                    <div className="w-full h-32 bg-slate-800/90 rounded-xl border border-slate-700/60 flex items-center justify-center my-2">
+                      <i className={`fa-solid ${zoomCard.icon} text-6xl text-cyan-400 filter drop-shadow`}></i>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xl font-black text-slate-100 tracking-wide">{zoomCard.title}</div>
+                      <div className="text-sm text-slate-300 leading-snug mt-2">{zoomCard.desc}</div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3470,24 +3575,37 @@
                         <div className="text-[10px] text-slate-500">點選 1 張保留，其餘 3 張面朝下洗勻放回中央。</div>
                       </div>
                     ) : modal.type === 'GRAVEDIGGER' ? (
-                      <>
-                        <PlayerPicker label="選擇目標玩家：" value={selectedTarget} onChange={v => { setSelectedTarget(v); setSelectedStolenCard(''); }} options={players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(canSteal))} />
-                        {selectedTarget && (
-                          <div>
-                            <label className="block text-slate-400 mb-1">選擇欲奪取之卡牌：</label>
-                            <select value={selectedStolenCard} onChange={e => setSelectedStolenCard(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                              <option value="">-- 請選擇卡牌 --</option>
-                              {availableStolenCards.map(c => <option key={c.id} value={c.id}>({c.value}) {c.title}</option>)}
-                            </select>
-                          </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-slate-400">點選欲奪取的牌（各玩家面前）：</label>
+                        {players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(canSteal)).length === 0 && (
+                          <div className="text-slate-500 py-1">場上無可奪取的牌</div>
                         )}
-                      </>
+                        <div className="space-y-1.5 max-h-[45vh] overflow-y-auto pr-0.5 scrollbar-none">
+                          {players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(canSteal)).map(p => (
+                            <div key={p.id} className="flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-1.5">
+                              <div className="shrink-0 w-12"><FxChip p={p} size="w-9 h-9 text-base" /></div>
+                              <div className="flex flex-wrap gap-1.5 min-w-0">
+                                {p.playedCards.filter(canSteal).map(c => {
+                                  const sel = selectedStolenCard === c.id;
+                                  return (
+                                    <button type="button" key={c.id} onClick={() => { setSelectedTarget(String(p.id)); setSelectedStolenCard(c.id); }} className={`rounded-md border-2 px-1.5 py-1 flex items-center gap-1 bg-slate-900 active:scale-95 ${sel ? 'border-amber-400 ring-2 ring-amber-400/70' : 'border-slate-600'}`}>
+                                      <span className="font-mono font-black text-amber-300 text-xs">{c.value}</span>
+                                      <i className={`fa-solid ${c.icon || 'fa-circle'} text-amber-400 text-[10px]`}></i>
+                                      <span className="text-[10px] font-black text-amber-100 whitespace-nowrap">{c.title}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ) : modal.type === 'WITCH' ? (
                       <PlayerPicker label="選擇復活玩家：" value={selectedTarget} onChange={setSelectedTarget} options={deadTargets} />
                     ) : modal.type === 'PICKPOCKET' ? (
                       <>
-                        <PlayerPicker label="選擇目標玩家 1：" value={selectedTarget} onChange={setSelectedTarget} options={aliveTargets} />
-                        <PlayerPicker label="選擇目標玩家 2：" value={secondaryTarget} onChange={setSecondaryTarget} options={aliveTargets.filter(p => p.id.toString() !== selectedTarget)} />
+                        <PlayerPicker label="選擇目標玩家 1（可選自己）：" value={selectedTarget} onChange={v => { setSelectedTarget(v); if (v === secondaryTarget) setSecondaryTarget(''); }} options={[players[0], ...aliveTargets]} />
+                        <PlayerPicker label="選擇目標玩家 2（可選自己）：" value={secondaryTarget} onChange={setSecondaryTarget} options={[players[0], ...aliveTargets].filter(p => p.id.toString() !== selectedTarget)} />
                       </>
                     ) : (
                       <PlayerPicker label={modal.type === 'BOUNTY_HUNTER' ? '選擇目標（可選自己）：' : '選擇對手目標：'} value={selectedTarget} onChange={setSelectedTarget} options={modal.type === 'BOUNTY_HUNTER' ? [players[0], ...aliveTargets] : aliveTargets} />
