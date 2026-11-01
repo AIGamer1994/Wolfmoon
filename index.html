@@ -273,7 +273,12 @@
           return String(v).split('').map(d => NUM_KEYCAPS[parseInt(d, 10)]).join('');
         };
         const KNOWN_CARD_TITLES = new Set([...BASE_CARDS_DEF.map(c => c.title), '狼人', ...MOON_CARDS.map(m => m.title)]);
+<<<<<<< HEAD
         // ==== FX START：C 區效果動畫（純視覺疊層，不影響遊戲流程；公開／私密內容由呼叫端篩選）====
+=======
+        // ==== FX START：C 區效果動畫（純視覺疊層，不影響遊戲流程；資訊皆為公開資訊）====
+        const FX_C_ZOOM = 1.3; // C 區動畫（非全屏）的放大倍數
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
         const FX_KIND = {
           '村民': 'guess', '刺客': 'guess', '稅務官': 'ask', '審判官': 'ask', '先知': 'peek',
           '酒保': 'compare', '小女孩': 'compare', '小偷': 'swap', '扒手': 'swap', '醉漢': 'drunk',
@@ -357,11 +362,23 @@
             const ssrc = servantSource;
             return { key: `${Date.now()}-${Math.random()}`, kind: 'servant', card: { title: '僕人', value: 1, icon: 'fa-bell-concierge' }, src: ssrc, tgt: null, tone: 'ok', baseDur: FX_DURATION.servant, duration: FX_TOTAL_BY.servant };
           }
+<<<<<<< HEAD
           const takeOneSource = playerWithPrefix(' 執行【拿一還一】');
           if (takeOneSource) {
             const sm = /暗牌 (\d)/.exec(res);
             const tsrc = takeOneSource;
             return { key: `${Date.now()}-${Math.random()}`, kind: 'takeone', card: { title: '拿一還一', value: '', icon: 'fa-right-left' }, src: tsrc, tgt: null, tone: 'ok', slot: sm ? parseInt(sm[1], 10) - 1 : null, baseDur: FX_DURATION.takeone, duration: FX_TOTAL };
+=======
+          const tk = /^(\S+) 執行【拿一還一】/.exec(String(actionText || ''));
+          if (tk && st && st.players) {
+            const tsrc = st.players.find(p => p.name === tk[1]) || null;
+            const sm = /暗牌 (\d)/.exec(String(resultText || ''));
+            if (!tsrc || !sm) return null;
+            const tm = /拿到\((\d+)\)【([^】]+)】，放回\((\d+)\)【([^】]+)】/.exec(String(resultText || ''));
+            const tmk = (v, t) => { const mt = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === t); return { value: parseInt(v, 10), title: t, icon: mt && mt.icon }; };
+            const tmine = (tsrc.id === 0 && tm) ? { in: tmk(tm[1], tm[2]), out: tmk(tm[3], tm[4]) } : null;
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'takeone', card: { title: '拿一還一', value: '', icon: 'fa-right-left' }, src: tsrc, tgt: null, tone: 'ok', slot: parseInt(sm[1], 10) - 1, mine: tmine, baseDur: FX_DURATION.takeone, duration: FX_TOTAL };
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
           }
           const m = /打出了\((\d+)\)【([^】]+)】(.*)$/.exec(action);
           if (!m || !st || !players.length) return null;
@@ -373,8 +390,25 @@
           const tgt = targetName === '自己' ? src : byName(targetName);
           const meta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === m[2]);
           if (!meta) return null;
+<<<<<<< HEAD
           const tail = m[3] || '';
           const card = { title: meta.title, value: parseInt(m[1], 10), icon: meta.icon };
+=======
+          const players = st.players;
+          const byName = (n) => (n ? (players.find(p => p.name === n) || null) : null);
+          // 玩家自己換出／換入的牌（紀錄文字「｜你 換出 (X)【牌】、取得 (Y)【牌】」；只有玩家自己的資訊）
+          const parseMine = (r) => {
+            const mm = /你 換出 \((\d+)\)【([^】]+)】、取得 \((\d+)\)【([^】]+)】/.exec(r);
+            if (!mm) return null;
+            const mk = (v, t) => { const mt = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === t); return { value: parseInt(v, 10), title: t, icon: mt && mt.icon }; };
+            return { out: mk(mm[1], mm[2]), in: mk(mm[3], mm[4]) };
+          };
+          const src = byName(m[1]);
+          const tgt = m[2] === '自己' ? src : byName(m[2]);
+          const res = String(resultText || '');
+          const tail = m[5] || '';
+          const card = { title: meta.title, value: parseInt(m[3], 10), icon: meta.icon };
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
 
           let tone = 'ok';
           if (/無任何效果|沒有任何效果/.test(res)) tone = 'none';
@@ -429,8 +463,11 @@
           } else if (kind === 'swap') {
             if (meta.title === '小偷') {
               fx.a = src; fx.b = tgt; fx.extraTurn = /額外回合/.test(res);
+              const mine = parseMine(res);
+              if (mine) fx.mine = mine;
               if (!fx.a || !fx.b) kind = fx.kind = 'plain';
             } else {
+<<<<<<< HEAD
               let pair = null;
               for (const a of orderedPlayers) {
                 for (const b of orderedPlayers) {
@@ -442,6 +479,12 @@
                 if (pair) break;
               }
               fx.a = pair ? pair[0] : null; fx.b = pair ? pair[1] : null;
+=======
+              const pm = /秘密交換了 (\S+) 與 (\S+) 的手牌/.exec(res);
+              fx.a = pm ? byName(pm[1]) : null; fx.b = pm ? byName(pm[2]) : null;
+              const mine = parseMine(res);
+              if (mine) fx.mine = mine;
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
               if (!fx.a || !fx.b) kind = fx.kind = 'plain';
             }
           } else if (kind === 'drunk') {
@@ -449,6 +492,7 @@
             const skippedNames = sm ? sm[1].split('、') : [];
             fx.participants = players.filter(p => p.status === '存活' && !skippedNames.includes(p.name));
             fx.skipped = players.filter(p => skippedNames.includes(p.name));
+<<<<<<< HEAD
             // 玩家自己洗入了哪張、拿到哪張；只有該玩家的私密動畫會帶入牌面。
             const minePlayer = orderedPlayers.find(p => res.includes(`${p.name} 換出 (`));
             const minePrefix = minePlayer ? `${minePlayer.name} 換出 (` : '';
@@ -457,6 +501,11 @@
               const mk = (v, t) => { const mt = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === t); return { value: parseInt(v, 10), title: t, icon: mt && mt.icon }; };
               fx.mine = { out: mk(mm[1], mm[2]), in: mk(mm[3], mm[4]) };
             }
+=======
+            // 玩家自己洗入了哪張、拿到哪張
+            const mine = parseMine(res);
+            if (mine) fx.mine = mine;
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
             if (!fx.participants.length) kind = fx.kind = 'plain';
           } else if (kind === 'bounty') {
             const bm = /\((\d+)\)【([^】]+)】/.exec(String(reveal || ''));
@@ -536,6 +585,23 @@
             <div className={`${cls} rounded-md border-2 border-amber-500/70 bg-gradient-to-br from-indigo-900 to-slate-800 flex flex-col items-center justify-center gap-0.5 shadow`}>
               <i className={`fa-solid fa-moon text-amber-400/80 ${moonCls}`}></i>
               {label && <span className="text-[10px] font-black text-slate-300 leading-none">{label}</span>}
+            </div>
+          );
+        }
+        // 玩家自己的換牌：換出什麼、換入什麼（swap／takeone／drunk 共用）
+        function FxMine({ mine, delay = 2, out = '你換出', inn = '你換入' }) {
+          if (!mine) return null;
+          return (
+            <div className="flex items-center gap-2 rounded-lg border border-yellow-400/70 bg-slate-950/70 px-2 py-1" style={{ animation: `fxPop .4s ease ${delay}s both` }}>
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] font-black text-sky-300">{out}</span>
+                <FxFace c={mine.out} cls="w-12 h-[60px]" />
+              </div>
+              <i className="fa-solid fa-arrow-right text-amber-400 text-sm"></i>
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] font-black text-emerald-300">{inn}</span>
+                <FxFace c={mine.in} cls="w-12 h-[60px]" />
+              </div>
             </div>
           );
         }
@@ -721,12 +787,6 @@
                   <path d="M0 40 Q40 14 80 36 T150 30 T220 38 T270 24 L270 84 L0 84 Z" fill="#05060f" />
                   <path d="M0 62 Q60 44 120 58 T270 52 L270 84 L0 84 Z" fill="#02030a" />
                 </svg>
-                {red && !held && (
-                  <span className="absolute left-1/2 -ml-[22px] bottom-[calc(24%+8px)] w-[44px] h-[44px] flex items-center justify-center" style={an('fxPop', 0.5, 3.1)}>
-                    <span className="text-[44px] leading-none opacity-25" style={{ filter: 'brightness(0)' }}>🐺</span>
-                    <i className="fa-solid fa-ban absolute text-slate-300 text-3xl"></i>
-                  </span>
-                )}
                 <div className="absolute top-[9%] inset-x-0 text-center" style={an('fxFadeUp', 0.5, 0.1)}>
                   <div className="text-xs text-slate-300 font-bold mb-1">{src ? src.name : ''} {bite ? '手握【狼人】' : '翻開了'}</div>
                   <div className={`text-xl font-black tracking-widest ${red ? 'text-rose-300' : 'text-amber-200'}`}>{mnames[ph - 1] || card.title}</div>
@@ -876,6 +936,7 @@
                   </div>
                 </div>
                 <div className="text-[9px] text-slate-400" style={an('fxFadeUp', 0.4, 0.5)}>中央暗牌維持 3 張（牌面不公開）</div>
+                <FxMine mine={fx.mine} delay={2.0} />
               </div>
             );
           } else if (kind === 'compare') {
@@ -945,6 +1006,7 @@
                   </div>
                   <div style={an('fxInR', 0.4, 0.1)}><FxChip p={fx.b} /></div>
                 </div>
+                <FxMine mine={fx.mine} delay={1.9} />
                 {fx.extraTurn && (
                   <div className="px-2 py-0.5 rounded-full bg-emerald-900/70 border border-emerald-500/60 text-emerald-200 text-[10px] font-black" style={an('fxFadeUp', 0.4, 1.9)}>獲得額外回合</div>
                 )}
@@ -993,19 +1055,7 @@
                     );
                   })}
                 </div>
-                {fx.mine && (
-                  <div className="flex items-center gap-2" style={an('fxPop', 0.4, 2.9)}>
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-[10px] font-black text-sky-300">你洗入</span>
-                      <FxFace c={fx.mine.out} cls="w-12 h-[60px]" />
-                    </div>
-                    <i className="fa-solid fa-arrow-right text-amber-400 text-sm"></i>
-                    <div className="flex flex-col items-center gap-0.5">
-                      <span className="text-[10px] font-black text-sky-300">你拿到</span>
-                      <FxFace c={fx.mine.in} cls="w-12 h-[60px]" />
-                    </div>
-                  </div>
-                )}
+                <FxMine mine={fx.mine} delay={2.9} />
                 {fx.skipped && fx.skipped.length > 0 && (
                   <div className="text-[9px] font-bold text-cyan-300" style={an('fxFadeUp', 0.4, 0.5)}><i className="fa-solid fa-shield-halved mr-1"></i>{fx.skipped.map(p => p.name).join('、')} 受保護未參與</div>
                 )}
@@ -1131,8 +1181,14 @@
           const showReveals = reveals.length > 0 && kind !== 'compare' && !(kind === 'bounty' && fx.revealed);
           const fxEl = (
             <div
+<<<<<<< HEAD
               className={`${replay ? 'fx-hold' : ''} ${full ? 'fixed inset-0 z-[70] bg-black/30' : 'absolute inset-x-0 top-6 bottom-0 z-30 rounded-lg'} flex justify-center ${isNone ? 'items-end pb-3 pointer-events-none' : (full ? 'items-center cursor-pointer' : 'items-center bg-slate-950/45 cursor-pointer')}`}
               style={replay ? undefined : (fx.sticky ? { animation: 'fxIn .25s linear both' } : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` })}
+=======
+              ref={rootRef}
+              className={`${replay ? 'fx-hold' : ''} ${full ? 'fixed inset-0 z-[70] bg-black' : 'absolute inset-x-0 top-0 bottom-0 z-30 rounded-lg'} flex justify-center ${isNone ? 'items-end pb-3 pointer-events-none' : (full ? 'items-center cursor-pointer' : 'items-center bg-slate-950/90 cursor-pointer')}`}
+              style={{ ...(full ? {} : { zoom: FX_C_ZOOM, top: 24 / FX_C_ZOOM }), ...(replay ? {} : (fx.sticky ? { animation: 'fxIn .25s linear both' } : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` })) }}
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
               onClick={isNone ? undefined : handleClick}
             >
               <div ref={bodyRef} className="contents">{body}</div>
@@ -1250,6 +1306,7 @@
         };
 
         function App() {
+<<<<<<< HEAD
           const [version] = useState('v0.1.0 Online');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => localStorage.getItem('wolfmoon.displayName') || '');
@@ -1540,6 +1597,9 @@
             setOnlineSession(false);
             setScreen('home');
           };
+=======
+          const [version] = useState('v0.0.19 M');
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -1598,6 +1658,7 @@
           const [actionLocked, setActionLocked] = useState(false);
           const lockRef = useRef(false);
           const [seerSeen, setSeerSeen] = useState(null); // 先知看過的 { targetId, card }（只有玩家自己看得到）
+          const [drunkSeen, setDrunkSeen] = useState(null); // 醉漢檢視過的在場手牌 [{ targetId, card }]（不含自己；只有玩家自己看得到，洗牌後換過就標舊資訊）
           // 速度：1＝正常，0.5＝放慢（AI 等待、月亮停留、效果動畫都按倍數拉長）；再點一次同一顆回到 1x
           const [speed, setSpeed] = useState(1);
           const speedRef = useRef(1);
@@ -1679,6 +1740,7 @@
           };
 
           // 效果動畫：啟動／略過
+<<<<<<< HEAD
           const startFx = (f0, publicFx = null) => {
             // 動畫在本機停在最後一格；遊戲流程只等待實際播放時長，不等待點擊。
             const sticky = f0.kind !== 'none';
@@ -1686,8 +1748,25 @@
             const sharedFx = publicFx
               ? { ...publicFx, key: f.key, duration: f.duration, hold: f.hold, sticky }
               : (f.privateTo?.length ? null : f);
+=======
+          const FX_FULL_KINDS = ['moon', 'wolfbite', 'vampire']; // 全屏動畫：必須等前一個動畫播完（並被點掉）才開始
+          const fxQueueRef = useRef([]);   // 排隊中的動畫
+          const fxCurRef = useRef(null);   // 目前顯示中的動畫
+          const fxShownRef = useRef(false); // 目前是否有動畫停在畫面上（等玩家點一下）
+          const startFx = (f0) => {
+            // 動畫播完後停在最後一格，直到玩家點一下才離開；AI／換人的等待也一併等這一下（略過＝點一下）
+            const sticky = f0.kind !== 'none';
+            const f = { ...f0, duration: Math.round(f0.duration * slow()), hold: sticky ? 0 : Math.round(fxHold(f0) * slow()), sticky };
+            // 已有動畫在畫面上：全屏動畫（或排在全屏動畫、其他排隊動畫之後的動畫）不能直接蓋掉，改為排隊，前一個被點掉後才播
+            if (sticky && fxShownRef.current && (FX_FULL_KINDS.includes(f.kind) || fxQueueRef.current.length > 0 || (fxCurRef.current && FX_FULL_KINDS.includes(fxCurRef.current.kind)))) {
+              fxQueueRef.current.push(f);
+              return;
+            }
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
             clearTimeout(fxTimerRef.current);
             fastRef.current = false;
+            fxCurRef.current = f;
+            fxShownRef.current = sticky;
             setFx(f);
             if (onlineSession && roomCode && firebaseUser && sharedFx) {
               const event = JSON.parse(JSON.stringify({
@@ -1750,6 +1829,17 @@
           };
           const skipFx = () => {
             clearTimeout(fxTimerRef.current);
+            // 還有排隊中的動畫：直接換下一個（AI 與換人繼續等，不放行）
+            const nxt = fxQueueRef.current.shift();
+            if (nxt) {
+              fxCurRef.current = nxt;
+              fxShownRef.current = true;
+              fxUntilRef.current = Infinity;
+              setFx(nxt);
+              return;
+            }
+            fxCurRef.current = null;
+            fxShownRef.current = false;
             fxUntilRef.current = 0;
             setFx(null);
             fastRef.current = true;
@@ -1906,6 +1996,8 @@
           };
 
           // 玩家（人類）換到新手牌時，列出取得的牌（僅限自己；AI 取得的牌不公開）
+          // 比大小（酒保／小女孩）輸家公開手牌：與 eliminatePlayer 內的公開文字完全相同（寫入時會自動去重）
+          const cmpReveal = (p, c) => `${p.name} 公開手牌：${c ? `(${c.value})【${c.title}】` : '無'}`;
           const gotCardsText = (hand, oldHand) => {
             const fmt = (arr) => arr.map(c => `(${c.value})【${c.title}】`).join('、');
             const cs = (hand || []).filter(Boolean);
@@ -1984,6 +2076,10 @@
             fxUntilRef.current = 0;
             setReplay(null);
             setSeerSeen(null);
+            setDrunkSeen(null);
+            fxQueueRef.current = [];
+            fxCurRef.current = null;
+            fxShownRef.current = false;
             setFx(null);
             setWitchTargetOwner(null);
             setIsReturningCenterCard(false);
@@ -2824,6 +2920,7 @@
                   const partsV = stV.players.filter(p => p.status === '存活' && (p.id === humanPlayerId || !p.protected));
                   const skippedV = stV.players.filter(p => p.status === '存活' && p.id !== humanPlayerId && p.protected);
                   const viewV = partsV.map(p => ({ p, card: ((stV.playerHands[p.id] || []).filter(Boolean))[0] || null }));
+                  setDrunkSeen(viewV.filter(v => v.p.id !== 0 && v.card).map(v => ({ targetId: v.p.id, card: v.card })));
                   setInteractionModal({ type: 'DRUNK_VIEW', title: '醉漢：秘密檢視所有手牌', view: viewV, skipped: skippedV });
                   break;
                 }
@@ -3032,20 +3129,34 @@
                 if (sHand && tHand) {
                   if (card.type === 'BARKEEPER') {
                     if (sHand.value < tHand.value) {
+<<<<<<< HEAD
                       reportComparison(`${sourcePlayer.name}手牌較小出局！`, `${sourcePlayer.name}手牌較小出局`);
                       eliminatePlayer(sourceId, randomTarget.id, '酒保比大出局');
                     } else if (tHand.value < sHand.value) {
                       reportComparison(`${randomTarget.name}手牌較小出局！`, `${randomTarget.name}手牌較小出局`);
+=======
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌(${sHand.value})較小出局！`, sourcePlayer.name, null, cmpReveal(sourcePlayer, sHand));
+                      eliminatePlayer(sourceId, randomTarget.id, '酒保比大出局');
+                    } else if (tHand.value < sHand.value) {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌(${tHand.value})較小出局！`, sourcePlayer.name, null, cmpReveal(randomTarget, tHand));
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
                       eliminatePlayer(randomTarget.id, sourceId, '酒保比大出局');
                     } else {
                       reportComparison('雙方數值相同，平手無事發生', '秘密比大小完成，無公開變化');
                     }
                   } else {
                     if (sHand.value > tHand.value) {
+<<<<<<< HEAD
                       reportComparison(`${sourcePlayer.name}手牌較大出局！`, `${sourcePlayer.name}手牌較大出局`);
                       eliminatePlayer(sourceId, randomTarget.id, '小女孩比小出局');
                     } else if (tHand.value > sHand.value) {
                       reportComparison(`${randomTarget.name}手牌較大出局！`, `${randomTarget.name}手牌較大出局`);
+=======
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌(${sHand.value})較大出局！`, sourcePlayer.name, null, cmpReveal(sourcePlayer, sHand));
+                      eliminatePlayer(sourceId, randomTarget.id, '小女孩比小出局');
+                    } else if (tHand.value > sHand.value) {
+                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌(${tHand.value})較大出局！`, sourcePlayer.name, null, cmpReveal(randomTarget, tHand));
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
                       eliminatePlayer(randomTarget.id, sourceId, '小女孩比小出局');
                     } else {
                       reportComparison('雙方數值相同，平手無事發生', '秘密比大小完成，無公開變化');
@@ -3264,21 +3375,37 @@
               if (sHand && tHand) {
                 if (type === 'BARKEEPER') {
                   if (sHand.value < tHand.value) {
+<<<<<<< HEAD
                     reportComparison(`你的手牌(${sHand.value})較小 ➔ 你出局！`, '你手牌較小出局');
                     eliminatePlayer(humanPlayerId, targetId, '酒保比大出局');
                   } else if (tHand.value < sHand.value) {
                     reportComparison(`${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, `${target.name}手牌較小出局`);
                     eliminatePlayer(targetId, humanPlayerId, '酒保比大出局');
+=======
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `你的手牌(${sHand.value})較小 ➔ 你出局！`, '你', null, cmpReveal(players[0], sHand));
+                    eliminatePlayer(0, targetId, '酒保比大出局');
+                  } else if (tHand.value < sHand.value) {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, '你', null, cmpReveal(target, tHand));
+                    eliminatePlayer(targetId, 0, '酒保比大出局');
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
                   } else {
                     reportComparison('雙方數值相同 ➔ 平手無事發生', '秘密比大小完成，無公開變化');
                   }
                 } else {
                   if (sHand.value > tHand.value) {
+<<<<<<< HEAD
                     reportComparison(`你的手牌(${sHand.value})較大 ➔ 你出局！`, '你手牌較大出局');
                     eliminatePlayer(humanPlayerId, targetId, '小女孩比小出局');
                   } else if (tHand.value > sHand.value) {
                     reportComparison(`${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, `${target.name}手牌較大出局`);
                     eliminatePlayer(targetId, humanPlayerId, '小女孩比小出局');
+=======
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `你的手牌(${sHand.value})較大 ➔ 你出局！`, '你', null, cmpReveal(players[0], sHand));
+                    eliminatePlayer(0, targetId, '小女孩比小出局');
+                  } else if (tHand.value > sHand.value) {
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, '你', null, cmpReveal(target, tHand));
+                    eliminatePlayer(targetId, 0, '小女孩比小出局');
+>>>>>>> 77de57ad4e1dbacdc33cfc50281bcaf4cbf51671
                   } else {
                     reportComparison('雙方數值相同 ➔ 平手無事發生', '秘密比大小完成，無公開變化');
                   }
@@ -3934,13 +4061,39 @@
                     );
                   })()}
 
+                  {/* D區左下（先知上方）：醉漢檢視過的在場手牌（洗牌後換過手牌則變淡並標「舊資訊」） */}
+                  {drunkSeen && drunkSeen.length > 0 && (() => {
+                    const rows = drunkSeen.map(e => {
+                      const tp = players.find(p => p.id === e.targetId);
+                      if (!tp) return null;
+                      const nowCard = (playerHands[tp.id] || []).filter(Boolean)[0];
+                      const stale = tp.status !== '存活' || !nowCard || nowCard.id !== e.card.id;
+                      return { tp, c: e.card, stale };
+                    }).filter(Boolean);
+                    if (rows.length === 0) return null;
+                    const allStale = rows.every(r => r.stale);
+                    return (
+                      <div className="absolute left-1.5 z-30 flex flex-col items-start gap-0.5 pointer-events-none" style={{ bottom: seerSeen ? 104 : 6 }}>
+                        <span className="text-[7px] leading-none font-black text-violet-300">🍺 醉漢看過{allStale ? '・舊資訊' : ''}</span>
+                        {rows.map(({ tp, c, stale }) => (
+                          <div key={tp.id} className={`flex items-center gap-0.5 bg-slate-900/80 border border-violet-500/50 rounded pr-1 ${stale ? 'opacity-50' : ''}`}>
+                            <FxChip p={tp} size="w-4 h-4 text-[9px]" />
+                            <span className="font-mono font-black text-amber-300 text-[8px] leading-none">{c.value}</span>
+                            <span className="text-[7px] font-black text-slate-100 leading-none whitespace-nowrap">{c.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+
                   {/* D區左側：自己所有放在「面前」的牌（簡約顯示；絕對定位，不影響版面） */}
                   {(() => {
                     const me = players.find(p => p.id === humanPlayerId) || { playedCards: [] };
                     const front = getFrontCards(me);
                     if (front.length === 0) return null;
+                    const drunkH = drunkSeen && drunkSeen.length ? 12 + drunkSeen.length * 18 : 0;
                     return (
-                      <div className="absolute left-1.5 top-2 z-30 flex flex-col justify-start items-start gap-0.5 pointer-events-none overflow-hidden" style={{ bottom: seerSeen ? 108 : 6 }}>
+                      <div className="absolute left-1.5 top-2 z-30 flex flex-col justify-start items-start gap-0.5 pointer-events-none overflow-hidden" style={{ bottom: 6 + (seerSeen ? 102 : 0) + drunkH }}>
                         <span className="text-[8px] leading-none text-slate-400">🃏 面前 {front.length}</span>
                         {front.map((c, i) => {
                           const active = isCardActive(me, c);
@@ -4259,8 +4412,9 @@
                           : log.event === 'revive'
                             ? 'border-emerald-400 bg-emerald-950/30 shadow-[0_0_12px_rgba(52,211,153,0.5)]'
                             : 'border-purple-400 bg-slate-800/60';
+                        const mine = log.player === '你' || /你/.test(`${log.action !== undefined ? log.action : log.card}${log.result || ''}${log.reveal || ''}`);
                         return (
-                          <div key={log.id} onClick={log.fx ? () => playLogFx(log.fx) : undefined} className={`border-l-2 p-2 rounded flex flex-col ${lit} ${log.fx ? 'cursor-pointer active:brightness-125' : ''}`}>
+                          <div key={log.id} onClick={log.fx ? () => playLogFx(log.fx) : undefined} className={`${mine ? 'border-2 !border-yellow-400' : 'border-l-2'} p-2 rounded flex flex-col ${lit} ${log.fx ? 'cursor-pointer active:brightness-125' : ''}`}>
                             <div className="flex items-center justify-between">
                               <div className="text-[10px] text-purple-300 font-bold flex items-center gap-2">{onlineSession && log.player === humanPlayerName ? '你' : log.player}{log.isPrivateForViewer && <span className="text-[9px] text-sky-300"><i className="fa-solid fa-lock mr-0.5"></i>僅你可見</span>}{log.fx && <span className="text-[9px] text-sky-300 font-black"><i className="fa-solid fa-play mr-0.5"></i>點擊看動畫</span>}</div>
                               {log.event && (
