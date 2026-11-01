@@ -99,6 +99,11 @@
           100% { opacity: 1; transform: translate(var(--b), 0); }
         }
 
+        @keyframes fxTakeSlot { 0% { transform: translateY(0); } 30%, 55% { transform: translateY(-16px); } 100% { transform: translateY(0); } }
+
+        @keyframes btnBlinkG { 0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); border-color: rgba(16,185,129,.4); } 50% { box-shadow: 0 0 14px 3px rgba(52,211,153,.85); border-color: #6ee7b7; } }
+        @keyframes btnBlinkB { 0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0); border-color: rgba(59,130,246,.4); } 50% { box-shadow: 0 0 14px 3px rgba(96,165,250,.85); border-color: #93c5fd; } }
+
         /* 桌面端外框效果 */
         @media (min-width: 600px) {
             .mobile-container {
@@ -192,7 +197,9 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 3000, swap: 2700, drunk: 3000, watch: 2700, shield: 2100, bounty: 2800, grave: 2700, witch: 2500, selfout: 2100, plain: 2200, none: 1600 };
+        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 3000, swap: 2700, drunk: 3000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 2700, witch: 2500, selfout: 2100, plain: 2200, none: 1600 };
+        const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
+        const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -202,6 +209,13 @@
 
         // 由「動作行 + 結果行」推導動畫內容。只使用公開資訊；解析失敗回傳 null（不播動畫）
         function deriveFx(actionText, resultText, reveal, st) {
+          const tk = /^(\S+) 執行【拿一還一】/.exec(String(actionText || ''));
+          if (tk && st && st.players) {
+            const tsrc = st.players.find(p => p.name === tk[1]) || null;
+            const sm = /暗牌 (\d)/.exec(String(resultText || ''));
+            if (!tsrc || !sm) return null;
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'takeone', card: { title: '拿一還一', value: '', icon: 'fa-right-left' }, src: tsrc, tgt: null, tone: 'ok', slot: parseInt(sm[1], 10) - 1, baseDur: FX_DURATION.takeone, duration: FX_TOTAL };
+          }
           const m = /^(\S+) (?:對 (\S+) )?打出了\((\d+)\)【([^】]+)】(.*)$/.exec(String(actionText || ''));
           if (!m || !st || !st.players) return null;
           const meta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === m[4]);
@@ -215,7 +229,7 @@
           const card = { title: meta.title, value: parseInt(m[3], 10), icon: meta.icon };
 
           let tone = 'ok';
-          if (/無任何效果/.test(res)) tone = 'none';
+          if (/無任何效果|沒有任何效果/.test(res)) tone = 'none';
           else if (/自我淘汰/.test(res)) tone = 'out';
           else if (/復活了/.test(res)) tone = 'revive';
           else if (/能力無效|能力失敗|無有效目標|無卡牌可選|無可奪取|不足|無法勝利/.test(res)) tone = 'nofx';
@@ -224,6 +238,7 @@
           else if (/出局|淘汰/.test(res)) tone = 'out';
           else if (/失敗/.test(res)) tone = 'fail';
 
+          if (!FX_SHOW_NONE && (tone === 'none' || meta.title === '僕人')) return null;
           let kind = FX_KIND[meta.title] || 'plain';
           if (tone === 'none' || meta.title === '僕人') kind = 'none';
           else if (tone === 'nofx') kind = 'plain';
@@ -238,7 +253,7 @@
           } else if (kind === 'ask') {
             fx.question = meta.title === '稅務官' ? '0 或 1' : '9 或 10';
           } else if (kind === 'compare') {
-            fx.mode = meta.title === '酒保' ? '比小' : '比大';
+            fx.mode = meta.title === '酒保' ? '比大' : '比小';
             if (tone === 'out') {
               const lm = /(\S+?)(?:的)?手牌(?:\(\d+\))?較[小大]/.exec(res);
               const loser = lm ? byName(lm[1]) : null;
@@ -287,12 +302,20 @@
           }
 
           // 章（淘汰／失敗…）：只有結果公開時才蓋；先知、守夜人、醉漢等秘密或無勝負的牌不蓋
-          const okStamp = { swap: '交換' };
-          fx.stampText = tone === 'ok' ? (okStamp[kind] || null) : (FX_STAMP_TEXT[tone] || null);
+          fx.stampText = tone === 'ok' ? null : (FX_STAMP_TEXT[tone] || null);
           if (tone === 'none') fx.stampText = null;
           fx.stampTone = tone;
-          fx.stampOn = (tone === 'spy' || kind === 'selfout') ? 'src' : 'tgt';
-          fx.duration = FX_DURATION[kind] || 2200;
+          let elim = null;
+          if (tone === 'spy') {
+            const e1 = /反殺猜測者 (\S+?)！/.exec(res), e2 = /反殺！(\S+) 出局/.exec(res);
+            elim = byName((e1 || e2 || [])[1]);
+            if (elim && src && elim.id !== src.id && !fx.tgt) fx.tgt = elim;
+          }
+          if (kind === 'selfout' || tone === 'fail') fx.stampOn = 'src';
+          else if (tone === 'spy') fx.stampOn = (elim && fx.tgt && elim.id === fx.tgt.id) ? 'tgt' : 'src';
+          else fx.stampOn = 'tgt';
+          fx.baseDur = FX_DURATION[kind] || 2200;
+          fx.duration = kind === 'none' ? fx.baseDur : FX_TOTAL;
           return fx;
         }
 
@@ -334,6 +357,12 @@
 
         function FxOverlay({ fx, onSkip }) {
           const { kind, card, src, tgt } = fx;
+          const bodyRef = React.useRef(null);
+          React.useLayoutEffect(() => {
+            const r = (fx.baseDur || fx.duration) / fx.duration;
+            if (r === 1 || !bodyRef.current || !bodyRef.current.getAnimations) return;
+            bodyRef.current.getAnimations({ subtree: true }).forEach(a => { try { a.updatePlaybackRate(r); } catch (e) {} });
+          }, []);
           const an = (name, dur, delay, ease = 'cubic-bezier(.2,.9,.3,1.15)') => ({ animation: `${name} ${dur}s ${ease} ${delay}s both` });
           const stamp = (delay) => <FxStamp tone={fx.stampTone} text={fx.stampText} delay={delay} />;
           const isNone = kind === 'none';
@@ -343,6 +372,26 @@
             body = (
               <div className="px-3 py-1 rounded-full bg-slate-800/90 border border-slate-600 text-slate-300 text-[11px] font-black shadow-lg">
                 <span className="font-mono text-amber-300 mr-1">{card.value}</span>{card.title}｜{fx.noneText}
+              </div>
+            );
+          } else if (kind === 'takeone') {
+            body = (
+              <div className="flex flex-col items-center gap-2.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-200" style={an('fxPop', 0.4, 0)}>
+                  <i className="fa-solid fa-right-left"></i>拿一還一｜暗牌 {fx.slot + 1}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div style={an('fxInL', 0.4, 0.1)}><FxChip p={src} /></div>
+                  <div className="relative flex gap-2">
+                    {[0, 1, 2].map(i => (
+                      <div key={i} className="flex flex-col items-center gap-1" style={i === fx.slot ? { animation: 'fxTakeSlot 1.6s ease-in-out .6s both' } : an('fxPop', 0.3, 0.2 + i * 0.1)}>
+                        <div className={i === fx.slot ? 'drop-shadow-[0_0_8px_#fbbf24]' : ''}><FxBack cls="w-10 h-[54px]" /></div>
+                        <span className={`text-[9px] font-black ${i === fx.slot ? 'text-amber-300' : 'text-slate-500'}`}>暗牌{i + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="text-[9px] text-slate-400" style={an('fxFadeUp', 0.4, 0.5)}>中央暗牌維持 3 張（牌面不公開）</div>
               </div>
             );
           } else if (kind === 'compare') {
@@ -567,7 +616,7 @@
               style={{ '--fx-dur': `${fx.duration / 1000}s` }}
               onClick={isNone ? undefined : onSkip}
             >
-              {body}
+              <div ref={bodyRef} className="contents">{body}</div>
               {!isNone && <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">點一下略過</span>}
             </div>
           );
@@ -651,7 +700,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.13 M');
+          const [version] = useState('v0.0.16 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -1328,7 +1377,7 @@
                 if (highCards.length >= 2) {
                   triggerVictory(source, '吸血鬼降臨：面前集滿兩張 7 以上卡牌，立刻勝利！');
                 } else {
-                  logActionAndResult(`${source.name} 打出了(${card.value})【吸血鬼】`, '面前高階牌不足 2 張 ➔ 無法勝利', source.name);
+                  logActionAndResult(`${source.name} 打出了(${card.value})【吸血鬼】`, '沒有任何效果（面前高階牌不足）', source.name);
                   advanceTurn();
                 }
                 break;
@@ -1377,6 +1426,11 @@
               case 'BOUNTY_HUNTER':
               case 'GRAVEDIGGER':
               case 'NIGHT_WATCHMAN': {
+                if (card.type === 'WITCH' && sourceId === 0 && !stateRef.current.players.some(p => p.status === '出局')) {
+                  logActionAndResult('你 打出了(4)【女巫】', '沒有任何效果（場上無人可復活）', '你');
+                  advanceTurn();
+                  break;
+                }
                 if (sourceId === 0) {
                   setInteractionModal({ type: card.type, card });
                 } else {
@@ -1431,7 +1485,7 @@
                   else advanceTurn();
                 }, 3000);
               } else {
-                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【掘墓人】`, '場上無卡牌可選 ➔ 能力失敗', sourcePlayer.name);
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【掘墓人】`, '沒有任何效果（場上無卡牌可選）', sourcePlayer.name);
                 advanceTurn();
               }
               return;
@@ -1439,7 +1493,7 @@
 
             if (card.type === 'PICKPOCKET') {
               if (aliveTargets.length < 2) {
-                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, '可選對手不足 ➔ 能力無效', sourcePlayer.name);
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, '沒有任何效果（可選對手不足）', sourcePlayer.name);
               } else {
                 const [a, b] = shuffle(aliveTargets);
                 const aH = playerHands[a.id] || [];
@@ -1452,7 +1506,7 @@
             }
 
             if (aliveTargets.length === 0) {
-              logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【${card.title}】`, '場面無有效目標 ➔ 能力無效', sourcePlayer.name);
+              logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【${card.title}】`, '沒有任何效果（場面無有效目標）', sourcePlayer.name);
               advanceTurn();
               return;
             }
@@ -1515,25 +1569,25 @@
                 const tHand = (playerHands[randomTarget.id] || [])[0];
                 const cardVal = 3;
                 const cardName = card.type === 'BARKEEPER' ? '酒保' : '小女孩';
-                const cmpType = card.type === 'BARKEEPER' ? '比小' : '比大';
+                const cmpType = card.type === 'BARKEEPER' ? '比大' : '比小';
                 if (sHand && tHand) {
                   if (card.type === 'BARKEEPER') {
                     if (sHand.value < tHand.value) {
                       logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌較小出局！`, sourcePlayer.name);
-                      eliminatePlayer(sourceId, randomTarget.id, '酒保比小出局');
+                      eliminatePlayer(sourceId, randomTarget.id, '酒保比大出局');
                     } else if (tHand.value < sHand.value) {
                       logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌較小出局！`, sourcePlayer.name);
-                      eliminatePlayer(randomTarget.id, sourceId, '酒保比小出局');
+                      eliminatePlayer(randomTarget.id, sourceId, '酒保比大出局');
                     } else {
                       logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `平手無事發生`, sourcePlayer.name);
                     }
                   } else {
                     if (sHand.value > tHand.value) {
                       logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌較大出局！`, sourcePlayer.name);
-                      eliminatePlayer(sourceId, randomTarget.id, '小女孩比大出局');
+                      eliminatePlayer(sourceId, randomTarget.id, '小女孩比小出局');
                     } else if (tHand.value > sHand.value) {
                       logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌較大出局！`, sourcePlayer.name);
-                      eliminatePlayer(randomTarget.id, sourceId, '小女孩比大出局');
+                      eliminatePlayer(randomTarget.id, sourceId, '小女孩比小出局');
                     } else {
                       logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `平手無事發生`, sourcePlayer.name);
                     }
@@ -1562,7 +1616,7 @@
                   setWitchTargetOwner({ witchOwnerId: sourceId, targetId: reviveP.id });
                   logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, `復活了 ${reviveP.name} ➔ 綁定共同勝利`, sourcePlayer.name, 'revive');
                 } else {
-                  logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, '場上無已淘汰玩家可復活 ➔ 能力無效', sourcePlayer.name);
+                  logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, '沒有任何效果（場上無人可復活）', sourcePlayer.name);
                 }
                 advanceTurn();
                 break;
@@ -1661,7 +1715,7 @@
                 setSelectedHandCard(null);
                 setBroadcastResult(`➔ 奪取了面前(${stolen.value})【${stolen.title}】，請拖曳 1 張手牌到戰場打出`);
               } else {
-                logActionAndResult('你 打出了(6)【掘墓人】', '場面無可奪取之卡牌 ➔ 能力失敗', '你');
+                logActionAndResult('你 打出了(6)【掘墓人】', '沒有任何效果（場面無可奪取之卡牌）', '你');
                 advanceTurn();
               }
             } else if (type === 'BOUNTY_HUNTER') {
@@ -1712,23 +1766,23 @@
               if (sHand && tHand) {
                 if (type === 'BARKEEPER') {
                   if (sHand.value < tHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `你的手牌(${sHand.value})較小 ➔ 你出局！`, '你');
-                    eliminatePlayer(0, targetId, '酒保比小出局');
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `你的手牌(${sHand.value})較小 ➔ 你出局！`, '你');
+                    eliminatePlayer(0, targetId, '酒保比大出局');
                   } else if (tHand.value < sHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, '你');
-                    eliminatePlayer(targetId, 0, '酒保比小出局');
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, '你');
+                    eliminatePlayer(targetId, 0, '酒保比大出局');
                   } else {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `雙方數值相同 ➔ 平手無事發生`, '你');
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `雙方數值相同 ➔ 平手無事發生`, '你');
                   }
                 } else {
                   if (sHand.value > tHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `你的手牌(${sHand.value})較大 ➔ 你出局！`, '你');
-                    eliminatePlayer(0, targetId, '小女孩比大出局');
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `你的手牌(${sHand.value})較大 ➔ 你出局！`, '你');
+                    eliminatePlayer(0, targetId, '小女孩比小出局');
                   } else if (tHand.value > sHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, '你');
-                    eliminatePlayer(targetId, 0, '小女孩比大出局');
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, '你');
+                    eliminatePlayer(targetId, 0, '小女孩比小出局');
                   } else {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `雙方數值相同 ➔ 平手無事發生`, '你');
+                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `雙方數值相同 ➔ 平手無事發生`, '你');
                   }
                 }
               }
@@ -1757,7 +1811,7 @@
                 setWitchTargetOwner({ witchOwnerId: 0, targetId });
                 logActionAndResult(`你 打出了(4)【女巫】`, `復活了 ${target.name} ➔ 綁定共同勝利`, '你', 'revive');
               } else {
-                logActionAndResult('你 打出了(4)【女巫】', '場上無已淘汰玩家可復活 ➔ 能力無效', '你');
+                logActionAndResult('你 打出了(4)【女巫】', '沒有任何效果（場上無人可復活）', '你');
               }
               advanceTurn();
             } else if (type === 'COUNTER_SPY') {
@@ -1946,28 +2000,23 @@
                       {version}
                     </span>
                   </div>
-                  {gameOver && winnerInfo && (
-                    <button onClick={handleNextGame} className="flex items-center space-x-1 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-md shadow active:scale-95 animate-pulse">
-                      <i className="fa-solid fa-forward-step text-[9px]"></i><span>{nextGameLabel}</span>
-                    </button>
-                  )}
                   <div className="flex items-center space-x-2">
-                    <button onClick={toggleAiPause} className={`flex items-center space-x-1.5 border text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95 ${aiPaused ? 'bg-amber-500/20 border-amber-400/70 text-amber-300' : 'bg-slate-800/90 border-slate-500/50 text-slate-300'}`}>
+                    <button onClick={toggleAiPause} className={`flex items-center justify-center h-6 gap-1 whitespace-nowrap border text-[11px] px-2 rounded-md shadow-sm active:scale-95 ${aiPaused ? 'bg-amber-500/20 border-amber-400/70 text-amber-300' : 'bg-slate-800/90 border-slate-500/50 text-slate-300'}`}>
                       <i className={`fa-solid ${aiPaused ? 'fa-play' : 'fa-pause'} text-[10px]`}></i>
                       <span className="font-bold text-[10px]">{aiPaused ? '繼續' : '暫停'}</span>
                     </button>
-                    <button onClick={() => setIsRulesModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-amber-500/40 text-amber-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
+                    <button onClick={() => setIsRulesModalOpen(true)} className="flex items-center justify-center h-6 gap-1 whitespace-nowrap bg-slate-800/90 border border-amber-500/40 text-amber-300 text-[11px] px-2 rounded-md shadow-sm active:scale-95">
                       <i className="fa-solid fa-book-open text-amber-400 text-[10px]"></i>
                       <span className="font-bold text-[10px]">規則</span>
                     </button>
-                    <button onClick={() => setIsDeckModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-cyan-500/40 text-cyan-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
+                    <button onClick={() => setIsDeckModalOpen(true)} className="flex items-center justify-center h-6 gap-1 whitespace-nowrap bg-slate-800/90 border border-cyan-500/40 text-cyan-300 text-[11px] px-2 rounded-md shadow-sm active:scale-95">
                       <i className="fa-solid fa-layer-group text-cyan-400 text-[10px]"></i>
                       <span className="font-bold text-[10px]">牌庫</span>
                       <span className="font-mono font-bold text-amber-300 ml-0.5">
                         {deck.length}
                       </span>
                     </button>
-                    <button onClick={() => setIsHistoryModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-purple-500/40 text-purple-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
+                    <button onClick={() => setIsHistoryModalOpen(true)} className="flex items-center justify-center h-6 gap-1 whitespace-nowrap bg-slate-800/90 border border-purple-500/40 text-purple-300 text-[11px] px-2 rounded-md shadow-sm active:scale-95">
                       <i className="fa-solid fa-clock-rotate-left text-purple-400 text-[10px]"></i>
                       <span className="font-bold text-[10px]">紀錄</span>
                     </button>
@@ -2171,6 +2220,13 @@
 
                 {/* D區: 底部手牌與操作區 */}
                 <footer className="h-[30%] min-h-[210px] bg-gradient-to-t from-slate-950 via-slate-900 to-slate-950 border-t border-slate-800 p-2 relative shrink-0 flex items-center justify-center">
+                  {gameOver && victoryDismissed && (
+                    <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/90">
+                      <button onClick={handleNextGame} className="flex items-center space-x-2 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-base font-black px-8 py-3 rounded-2xl shadow-lg active:scale-95 animate-pulse">
+                        <i className="fa-solid fa-forward-step"></i><span>{nextGameLabel}</span>
+                      </button>
+                    </div>
+                  )}
                   
                   {/* 拖曳提示（浮在 D 區上緣，不影響版面） */}
                   {myHand.filter(Boolean).length === 2 && !players[currentTurnIndex].isAI && !gameOver && (
@@ -2237,11 +2293,12 @@
                   </div>
 
                   {/* 右側浮動操作按鈕 */}
-                  <div className={`absolute right-2 top-1/2 -translate-y-1/2 w-[16%] max-w-[70px] h-[90%] flex flex-col justify-center space-y-2 z-20 bg-slate-950/60 backdrop-blur-sm p-1 rounded-xl border border-slate-800/80 shadow-lg ${myHand.length === 1 ? '' : 'hidden'}`}>
+                  <div className={`absolute right-2 top-1/2 -translate-y-1/2 w-[16%] max-w-[70px] h-[90%] flex flex-col justify-center space-y-2 z-20 p-1 ${myHand.length === 1 ? '' : 'hidden'}`}>
                     {myHand.length === 1 && (
                       <>
                         <button 
                           onClick={handleActionA}
+                          style={players[currentTurnIndex] && !players[currentTurnIndex].isAI && !gameOver && !actionLocked ? { animation: 'btnBlinkG 1.4s ease-in-out infinite' } : undefined}
                           disabled={players[currentTurnIndex].isAI || gameOver || actionLocked}
                           className="w-full group relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950/40 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 rounded-xl py-2 px-1 transition-all duration-300 active:scale-95 shadow-md flex flex-col items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
                         >
@@ -2253,6 +2310,7 @@
                         
                         <button 
                           onClick={handleActionB}
+                          style={players[currentTurnIndex] && !players[currentTurnIndex].isAI && !gameOver && !actionLocked ? { animation: 'btnBlinkB 1.4s ease-in-out infinite' } : undefined}
                           disabled={centerCards.filter(Boolean).length === 0 || players[currentTurnIndex].isAI || gameOver || actionLocked}
                           className="w-full group relative overflow-hidden bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950/40 border border-blue-500/40 hover:border-blue-400 text-blue-300 rounded-xl py-2 px-1 transition-all duration-300 active:scale-95 shadow-md flex flex-col items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
                         >
@@ -2583,7 +2641,7 @@
                                   </div>
                                 ) : (
                                   <>
-                                    <i className="fa-solid fa-dragon text-amber-500/80 text-xl mb-1"></i>
+                                    <div className="mb-1"><FxBack cls="w-9 h-12" /></div>
                                     <span className="text-[8px] text-slate-400">未知</span>
                                   </>
                                 )}
@@ -2640,6 +2698,27 @@
         }
 
         // 互動對話框組件
+        function PlayerPicker({ label, options, value, onChange }) {
+          return (
+            <div>
+              <label className="block text-slate-400 mb-1">{label}</label>
+              {options.length === 0 ? <div className="text-slate-500 py-1">無可選目標</div> : (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {options.map(p => {
+                    const sel = value === String(p.id);
+                    return (
+                      <button type="button" key={p.id} onClick={() => onChange(String(p.id))} className={`flex flex-col items-center rounded-lg border py-1.5 active:scale-95 ${sel ? 'border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/60' : 'border-slate-700 bg-slate-800'}`}>
+                        <span className={`w-9 h-9 rounded-full bg-gradient-to-br ${p.gradient} flex items-center justify-center text-lg`}>{p.emoji}</span>
+                        <span className={`text-[10px] font-bold mt-0.5 truncate max-w-full px-0.5 ${p.id === 0 ? 'text-sky-300' : 'text-slate-200'}`}>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        }
+
         function InteractionDialog({ modal, players, playerHands, centerCards, remainingCounts, allCards, onSubmit, onCancel }) {
           const [selectedTarget, setSelectedTarget] = useState('');
           const [secondaryTarget, setSecondaryTarget] = useState('');
@@ -2713,15 +2792,7 @@
                       </div>
                     ) : modal.type === 'GRAVEDIGGER' ? (
                       <>
-                        <div>
-                          <label className="block text-slate-400 mb-1">選擇目標玩家：</label>
-                          <select value={selectedTarget} onChange={e => { setSelectedTarget(e.target.value); setSelectedStolenCard(''); }} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                            <option value="">-- 請選擇玩家 --</option>
-                            {players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(canSteal)).map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
+                        <PlayerPicker label="選擇目標玩家：" value={selectedTarget} onChange={v => { setSelectedTarget(v); setSelectedStolenCard(''); }} options={players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(canSteal))} />
                         {selectedTarget && (
                           <div>
                             <label className="block text-slate-400 mb-1">選擇欲奪取之卡牌：</label>
@@ -2733,39 +2804,14 @@
                         )}
                       </>
                     ) : modal.type === 'WITCH' ? (
-                      <div>
-                        <label className="block text-slate-400 mb-1">選擇復活玩家：</label>
-                        <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                          <option value="">-- 請選擇 --</option>
-                          {deadTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                      </div>
+                      <PlayerPicker label="選擇復活玩家：" value={selectedTarget} onChange={setSelectedTarget} options={deadTargets} />
                     ) : modal.type === 'PICKPOCKET' ? (
                       <>
-                        <div>
-                          <label className="block text-slate-400 mb-1">選擇目標玩家 1：</label>
-                          <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                            <option value="">-- 請選擇 --</option>
-                            {aliveTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-slate-400 mb-1">選擇目標玩家 2：</label>
-                          <select value={secondaryTarget} onChange={e => setSecondaryTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                            <option value="">-- 請選擇 --</option>
-                            {aliveTargets.filter(p => p.id.toString() !== selectedTarget).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </select>
-                        </div>
+                        <PlayerPicker label="選擇目標玩家 1：" value={selectedTarget} onChange={setSelectedTarget} options={aliveTargets} />
+                        <PlayerPicker label="選擇目標玩家 2：" value={secondaryTarget} onChange={setSecondaryTarget} options={aliveTargets.filter(p => p.id.toString() !== selectedTarget)} />
                       </>
                     ) : (
-                      <div>
-                        <label className="block text-slate-400 mb-1">{modal.type === 'BOUNTY_HUNTER' ? '選擇目標（可選自己）：' : '選擇對手目標：'}</label>
-                        <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                          <option value="">-- 請選擇 --</option>
-                          {modal.type === 'BOUNTY_HUNTER' && <option value="0">你自己</option>}
-                          {aliveTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                      </div>
+                      <PlayerPicker label={modal.type === 'BOUNTY_HUNTER' ? '選擇目標（可選自己）：' : '選擇對手目標：'} value={selectedTarget} onChange={setSelectedTarget} options={modal.type === 'BOUNTY_HUNTER' ? [players[0], ...aliveTargets] : aliveTargets} />
                     )}
 
                     {/* 猜測數值選擇 */}
