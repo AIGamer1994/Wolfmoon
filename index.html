@@ -273,7 +273,7 @@
           return String(v).split('').map(d => NUM_KEYCAPS[parseInt(d, 10)]).join('');
         };
         const KNOWN_CARD_TITLES = new Set([...BASE_CARDS_DEF.map(c => c.title), '狼人', ...MOON_CARDS.map(m => m.title)]);
-        // ==== FX START：C 區效果動畫（純視覺疊層，不影響遊戲流程；資訊皆為公開資訊）====
+        // ==== FX START：C 區效果動畫（純視覺疊層，不影響遊戲流程；公開／私密內容由呼叫端篩選）====
         const FX_KIND = {
           '村民': 'guess', '刺客': 'guess', '稅務官': 'ask', '審判官': 'ask', '先知': 'peek',
           '酒保': 'compare', '小女孩': 'compare', '小偷': 'swap', '扒手': 'swap', '醉漢': 'drunk',
@@ -304,13 +304,19 @@
         };
         const playedCardsOf = player => Array.isArray(player && player.playedCards) ? player.playedCards : [];
 
-        // 由「動作行 + 結果行」推導動畫內容。只使用公開資訊；解析失敗回傳 null（不播動畫）
+        // 由「動作行 + 結果行」推導動畫內容；呼叫端決定傳入公開或玩家私密資訊。
         function deriveFx(actionText, resultText, reveal, st) {
-          const mn = /^(\S+) 翻開【([^】]+)】/.exec(String(actionText || ''));
-          if (mn) {
+          const action = String(actionText || '');
+          const res = String(resultText || '');
+          const players = st && Array.isArray(st.players) ? st.players : [];
+          const orderedPlayers = [...players].sort((a, b) => String(b.name || '').length - String(a.name || '').length);
+          const byName = name => name ? (players.find(p => p.name === name) || null) : null;
+          const playerWithPrefix = suffix => orderedPlayers.find(p => action.startsWith(`${p.name}${suffix}`)) || null;
+          const moonSource = playerWithPrefix(' 翻開【');
+          const moonTitle = moonSource && /^([^】]+)】/.exec(action.slice(moonSource.name.length + ' 翻開【'.length));
+          if (moonSource && moonTitle) {
             const mm = /(\d)\/3/.exec(String(resultText || ''));
             const ph = mm ? Math.min(3, Math.max(1, parseInt(mm[1], 10))) : 1;
-            const msrc = st && st.players ? (st.players.find(p => p.name === mn[1]) || null) : null;
             // 第 3 張月亮：場上有人手握狼人 ➔ 紅月之後直接播「咬向鏡頭」演出（較長）；狼人已被淘汰（面前有狼人牌）或無人手握 ➔ 沒有狼人
             let wolf = 'none', wolfWinner = null, traitorWinner = null;
             if (ph >= 3 && st && st.players) {
@@ -325,51 +331,50 @@
               if (!wolfWinner) traitorWinner = null;
             }
             const dur = ph >= 3 ? (wolf === 'held' ? 6800 : 4200) : 3200;
-            return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: mn[2], value: '🌙', icon: 'fa-moon' }, src: msrc, tgt: null, tone: 'ok', phase: ph, wolf, wolfWinner, traitorWinner, baseDur: dur, duration: dur };
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: moonTitle[1], value: '🌙', icon: 'fa-moon' }, src: moonSource, tgt: null, tone: 'ok', phase: ph, wolf, wolfWinner, traitorWinner, baseDur: dur, duration: dur };
           }
           // 第 3 張月亮翻開後，有人用拿一還一／守夜人把狼人留在手上 ➔ 直接播咬鏡頭演出
-          const wb = /^(\S+) 手握【狼人】/.exec(String(actionText || ''));
-          if (wb && st && st.players) {
-            const wsrc = st.players.find(p => p.name === wb[1]) || null;
+          const wolfSource = playerWithPrefix(' 手握【狼人】');
+          if (wolfSource) {
+            const wsrc = wolfSource;
             let wtraitor = null;
-            st.players.filter(p => p.status === '存活' && (!wsrc || p.id !== wsrc.id)).forEach(p => {
+            players.filter(p => p.status === '存活' && p.id !== wsrc.id).forEach(p => {
               if (((st.playerHands || {})[p.id] || []).some(c => c && c.title === '叛徒')) wtraitor = p;
             });
             return { key: `${Date.now()}-${Math.random()}`, kind: 'wolfbite', card: { title: '狼人', value: 10, icon: 'fa-paw' }, src: wsrc, tgt: null, tone: 'ok', phase: 3, wolf: 'held', wolfWinner: wsrc, traitorWinner: wtraitor, baseDur: FX_DURATION.wolfbite, duration: FX_TOTAL_BY.wolfbite };
           }
           // 吸血鬼獲勝：動作行含「吸血鬼降臨」（出牌者打出吸血鬼，或賞金獵人公開了目標的吸血鬼）
-          const vw = /^(\S+) .*?吸血鬼降臨/.exec(String(actionText || ''));
-          if (vw && st && st.players) {
-            const vsrc = st.players.find(p => p.name === vw[1]) || null;
+          const vampireSource = action.includes('吸血鬼降臨') && orderedPlayers.find(p => action.startsWith(`${p.name} `));
+          if (vampireSource) {
+            const vsrc = vampireSource;
             if (vsrc) {
               const hi = playedCardsOf(vsrc).filter(c => c && c.value >= 7).map(c => ({ title: c.title, value: c.value }));
               return { key: `${Date.now()}-${Math.random()}`, kind: 'vampire', card: { title: '吸血鬼', value: 2, icon: 'fa-droplet' }, src: vsrc, tgt: null, tone: 'ok', highCards: hi, baseDur: FX_DURATION.vampire, duration: FX_TOTAL_BY.vampire };
             }
           }
-          const sv = /^(\S+) 棄掉面前【僕人】/.exec(String(actionText || ''));
-          if (sv && st && st.players) {
-            const ssrc = st.players.find(p => p.name === sv[1]) || null;
-            if (!ssrc) return null;
+          const servantSource = playerWithPrefix(' 棄掉面前【僕人】');
+          if (servantSource) {
+            const ssrc = servantSource;
             return { key: `${Date.now()}-${Math.random()}`, kind: 'servant', card: { title: '僕人', value: 1, icon: 'fa-bell-concierge' }, src: ssrc, tgt: null, tone: 'ok', baseDur: FX_DURATION.servant, duration: FX_TOTAL_BY.servant };
           }
-          const tk = /^(\S+) 執行【拿一還一】/.exec(String(actionText || ''));
-          if (tk && st && st.players) {
-            const tsrc = st.players.find(p => p.name === tk[1]) || null;
-            const sm = /暗牌 (\d)/.exec(String(resultText || ''));
-            if (!tsrc || !sm) return null;
-            return { key: `${Date.now()}-${Math.random()}`, kind: 'takeone', card: { title: '拿一還一', value: '', icon: 'fa-right-left' }, src: tsrc, tgt: null, tone: 'ok', slot: parseInt(sm[1], 10) - 1, baseDur: FX_DURATION.takeone, duration: FX_TOTAL };
+          const takeOneSource = playerWithPrefix(' 執行【拿一還一】');
+          if (takeOneSource) {
+            const sm = /暗牌 (\d)/.exec(res);
+            const tsrc = takeOneSource;
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'takeone', card: { title: '拿一還一', value: '', icon: 'fa-right-left' }, src: tsrc, tgt: null, tone: 'ok', slot: sm ? parseInt(sm[1], 10) - 1 : null, baseDur: FX_DURATION.takeone, duration: FX_TOTAL };
           }
-          const m = /^(\S+) (?:對 (\S+) )?打出了\((\d+)\)【([^】]+)】(.*)$/.exec(String(actionText || ''));
-          if (!m || !st || !st.players) return null;
-          const meta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === m[4]);
+          const m = /打出了\((\d+)\)【([^】]+)】(.*)$/.exec(action);
+          if (!m || !st || !players.length) return null;
+          const prefix = action.slice(0, m.index).trim();
+          const src = orderedPlayers.find(p => prefix === p.name || prefix.startsWith(`${p.name} 對 `)) || null;
+          if (!src) return null;
+          const targetPrefix = `${src.name} 對 `;
+          const targetName = prefix.startsWith(targetPrefix) ? prefix.slice(targetPrefix.length) : '';
+          const tgt = targetName === '自己' ? src : byName(targetName);
+          const meta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === m[2]);
           if (!meta) return null;
-          const players = st.players;
-          const byName = (n) => (n ? (players.find(p => p.name === n) || null) : null);
-          const src = byName(m[1]);
-          const tgt = m[2] === '自己' ? src : byName(m[2]);
-          const res = String(resultText || '');
-          const tail = m[5] || '';
-          const card = { title: meta.title, value: parseInt(m[3], 10), icon: meta.icon };
+          const tail = m[3] || '';
+          const card = { title: meta.title, value: parseInt(m[1], 10), icon: meta.icon };
 
           let tone = 'ok';
           if (/無任何效果|沒有任何效果/.test(res)) tone = 'none';
@@ -406,8 +411,10 @@
           } else if (kind === 'compare') {
             fx.mode = meta.title === '酒保' ? '比大' : '比小';
             if (tone === 'out') {
-              const lm = /(\S+?)(?:的)?手牌(?:\(\d+\))?較[小大]/.exec(res);
-              const loser = lm ? byName(lm[1]) : null;
+              const loser = orderedPlayers.find(p => [`${p.name}手牌`, `${p.name}的手牌`].some(marker => {
+                const markerIndex = res.indexOf(marker);
+                return markerIndex >= 0 && /^(?:\(\d+\))?較[小大]/.test(res.slice(markerIndex + marker.length));
+              })) || null;
               if (!loser || !tgt || !src) kind = fx.kind = 'plain';
               else {
                 fx.loserId = loser.id;
@@ -418,14 +425,23 @@
                   fx.loserCard = { title: lc.title, value: lc.value, icon: (lmeta && lmeta.icon) || lc.icon };
                 }
               }
-            } else if (tone !== 'tie' || !tgt || !src) kind = fx.kind = 'plain';
+            } else if ((tone !== 'tie' && !res.includes('秘密比大小完成')) || !tgt || !src) kind = fx.kind = 'plain';
           } else if (kind === 'swap') {
             if (meta.title === '小偷') {
               fx.a = src; fx.b = tgt; fx.extraTurn = /額外回合/.test(res);
               if (!fx.a || !fx.b) kind = fx.kind = 'plain';
             } else {
-              const pm = /秘密交換了 (\S+) 與 (\S+) 的手牌/.exec(res);
-              fx.a = pm ? byName(pm[1]) : null; fx.b = pm ? byName(pm[2]) : null;
+              let pair = null;
+              for (const a of orderedPlayers) {
+                for (const b of orderedPlayers) {
+                  if (a.id !== b.id && res.includes(`秘密交換了 ${a.name} 與 ${b.name} 的手牌`)) {
+                    pair = [a, b];
+                    break;
+                  }
+                }
+                if (pair) break;
+              }
+              fx.a = pair ? pair[0] : null; fx.b = pair ? pair[1] : null;
               if (!fx.a || !fx.b) kind = fx.kind = 'plain';
             }
           } else if (kind === 'drunk') {
@@ -433,8 +449,10 @@
             const skippedNames = sm ? sm[1].split('、') : [];
             fx.participants = players.filter(p => p.status === '存活' && !skippedNames.includes(p.name));
             fx.skipped = players.filter(p => skippedNames.includes(p.name));
-            // 玩家自己洗入了哪張、拿到哪張（紀錄文字「｜你 換出 (X)【牌】、取得 (Y)【牌】」；只有玩家自己的資訊）
-            const mm = /你 換出 \((\d+)\)【([^】]+)】、取得 \((\d+)\)【([^】]+)】/.exec(res);
+            // 玩家自己洗入了哪張、拿到哪張；只有該玩家的私密動畫會帶入牌面。
+            const minePlayer = orderedPlayers.find(p => res.includes(`${p.name} 換出 (`));
+            const minePrefix = minePlayer ? `${minePlayer.name} 換出 (` : '';
+            const mm = minePrefix ? /^\((\d+)\)【([^】]+)】、取得 \((\d+)\)【([^】]+)】/.exec(res.slice(res.indexOf(minePrefix) + minePrefix.length)) : null;
             if (mm) {
               const mk = (v, t) => { const mt = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === t); return { value: parseInt(v, 10), title: t, icon: mt && mt.icon }; };
               fx.mine = { out: mk(mm[1], mm[2]), in: mk(mm[3], mm[4]) };
@@ -453,8 +471,7 @@
               fx.stolen = { value: parseInt(gm[1], 10), title: gm[2], icon: gmeta && gmeta.icon };
             }
           } else if (kind === 'witch') {
-            const wm = /復活了 (\S+)/.exec(res);
-            fx.tgt = wm ? byName(wm[1]) : null;
+            fx.tgt = orderedPlayers.find(p => res.includes(`復活了 ${p.name} ➔`)) || null;
             if (!fx.tgt) kind = fx.kind = 'plain';
           }
 
@@ -552,47 +569,18 @@
           );
         }
 
-        function FxOverlay({ fx, onSkip, onFastForward, fastForwardKey, replay, localPlayerId = 0 }) {
+        function FxOverlay({ fx, onSkip, replay, localPlayerId = 0 }) {
           const { kind, card, src, tgt } = fx;
           const full = kind === 'moon' || kind === 'wolfbite' || kind === 'vampire';
           const bodyRef = React.useRef(null);
-          const rootRef = React.useRef(null);
-          const doneRef = React.useRef(false); // 動畫是否已播到最後一格（播完或已被點一下快轉）
           const slotRef = React.useRef(null), stolenRef = React.useRef(null), tgtRef = React.useRef(null);
-          // 動畫自然播完的時間點（與「點一下略過」標籤消失、「點一下繼續」出現同一刻）
           React.useEffect(() => {
-            doneRef.current = false;
             if (replay) return;
-            const t = setTimeout(() => { doneRef.current = true; }, Math.max(0, fx.duration || 0));
-            const recoveryTimer = replay
-              ? null
-              : setTimeout(onSkip, Math.max(0, fx.duration || 0) + 10000);
-            return () => {
-              clearTimeout(t);
-              if (recoveryTimer) clearTimeout(recoveryTimer);
-            };
+            const recoveryTimer = setTimeout(onSkip, Math.max(0, fx.duration || 0) + 10000);
+            return () => clearTimeout(recoveryTimer);
           }, []);
-          const finishAnimation = () => {
-            doneRef.current = true;
-            const root = rootRef.current;
-            if (!root || !root.getAnimations) return false;
-            root.getAnimations({ subtree: true }).forEach(a => {
-              try { a.finish(); } catch (e) {
-                // 無限循環的動畫（如紅光脈動）無法 finish：跳到第一輪結束處，讓它從最後狀態接著播
-                try { const ct = a.effect.getComputedTiming(); a.currentTime = (ct.delay || 0) + (ct.duration || 0); } catch (_) {}
-              }
-            });
-            return true;
-          };
-          React.useEffect(() => {
-            if (fastForwardKey === fx.key) finishAnimation();
-          }, [fastForwardKey, fx.key]);
-          // 點一下：動畫還在播 ➔ 全房快轉到最後一格；已在最後一格 ➔ 全房結束動畫
-          const handleClick = () => {
-            if (replay || doneRef.current) { onSkip(); return; }
-            if (!finishAnimation()) { onSkip(); return; }
-            if (onFastForward) onFastForward();
-          };
+          // 點一下只略過目前裝置的動畫
+          const handleClick = () => onSkip();
           // 掘墓人：量出「目標頭像」到「出牌者左邊空位」的距離，讓奪取的牌從目標那邊滑過來
           React.useLayoutEffect(() => {
             const sl = slotRef.current, tg = tgtRef.current, el = stolenRef.current;
@@ -870,10 +858,11 @@
               </div>
             );
           } else if (kind === 'takeone') {
+            const selectedSlot = Number.isInteger(fx.slot);
             body = (
               <div className="flex flex-col items-center gap-2.5">
                 <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-200" style={an('fxPop', 0.4, 0)}>
-                  <i className="fa-solid fa-right-left"></i>拿一還一｜暗牌 {fx.slot + 1}
+                  <i className="fa-solid fa-right-left"></i>拿一還一{selectedSlot ? `｜暗牌 ${fx.slot + 1}` : ''}
                 </div>
                 <div className="flex items-center gap-3">
                   <div style={an('fxInL', 0.4, 0.1)}><FxChip p={src} /></div>
@@ -1142,7 +1131,6 @@
           const showReveals = reveals.length > 0 && kind !== 'compare' && !(kind === 'bounty' && fx.revealed);
           const fxEl = (
             <div
-              ref={rootRef}
               className={`${replay ? 'fx-hold' : ''} ${full ? 'fixed inset-0 z-[70] bg-black/30' : 'absolute inset-x-0 top-6 bottom-0 z-30 rounded-lg'} flex justify-center ${isNone ? 'items-end pb-3 pointer-events-none' : (full ? 'items-center cursor-pointer' : 'items-center bg-slate-950/45 cursor-pointer')}`}
               style={replay ? undefined : (fx.sticky ? { animation: 'fxIn .25s linear both' } : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` })}
               onClick={isNone ? undefined : handleClick}
@@ -1280,8 +1268,6 @@
           const applyingRemoteGameRef = useRef(false);
           const gameSyncTimerRef = useRef(null);
           const fxEventKeyRef = useRef(null);
-          const skipFxRef = useRef(null);
-          const [fxFastForwardKey, setFxFastForwardKey] = useState(null);
           const [gameReady, setGameReady] = useState(false);
 
           useEffect(() => {
@@ -1358,25 +1344,26 @@
             let isInitialValue = true;
             const onValue = snapshot => {
               const event = snapshot.val();
+              const initialSnapshot = isInitialValue;
               if (isInitialValue) {
                 isInitialValue = false;
                 fxEventKeyRef.current = event && event.key || null;
               }
               if (!event) {
                 fxEventKeyRef.current = null;
-                setFxFastForwardKey(null);
                 return;
               }
               if (!event.key) return;
-              if (event.key !== fxEventKeyRef.current) {
+              const isNewEvent = event.key !== fxEventKeyRef.current;
+              const shouldShowEvent = isNewEvent || initialSnapshot;
+              if (shouldShowEvent) {
                 fxEventKeyRef.current = event.key;
-                setFxFastForwardKey(null);
                 if (event.fx && (!event.fx.privateTo?.length || event.fx.privateTo.includes(humanPlayerId)) && event.sourceUid !== firebaseUser.uid) {
                   const receivedFx = event.fx;
                   clearTimeout(fxTimerRef.current);
                   setFx(receivedFx);
                   if (receivedFx.sticky) {
-                    fxUntilRef.current = Infinity;
+                    fxUntilRef.current = Date.now() + Math.max(0, receivedFx.duration || 0);
                   } else {
                     const lifetime = Math.max(0, receivedFx.duration || 0) + Math.max(0, receivedFx.hold || 0);
                     fxUntilRef.current = Date.now() + lifetime;
@@ -1387,12 +1374,6 @@
                     }, lifetime + 60);
                   }
                 }
-              }
-              if (event.fastForwardedKey === event.key && event.fastForwardedBy !== firebaseUser.uid) {
-                setFxFastForwardKey(event.key);
-              }
-              if (event.dismissedKey === event.key && event.dismissedBy !== firebaseUser.uid && fxRef.current?.key === event.key) {
-                skipFxRef.current?.(false);
               }
             };
             const onError = error => {
@@ -1698,18 +1679,21 @@
           };
 
           // 效果動畫：啟動／略過
-          const startFx = (f0) => {
-            // 動畫播完後停在最後一格，直到玩家點一下才離開；AI／換人的等待也一併等這一下（略過＝點一下）
+          const startFx = (f0, publicFx = null) => {
+            // 動畫在本機停在最後一格；遊戲流程只等待實際播放時長，不等待點擊。
             const sticky = f0.kind !== 'none';
             const f = { ...f0, duration: Math.round(f0.duration * slow()), hold: sticky ? 0 : Math.round(fxHold(f0) * slow()), sticky };
+            const sharedFx = publicFx
+              ? { ...publicFx, key: f.key, duration: f.duration, hold: f.hold, sticky }
+              : (f.privateTo?.length ? null : f);
             clearTimeout(fxTimerRef.current);
             fastRef.current = false;
             setFx(f);
-            if (onlineSession && roomCode && firebaseUser && !f.privateTo?.length) {
+            if (onlineSession && roomCode && firebaseUser && sharedFx) {
               const event = JSON.parse(JSON.stringify({
                 key: f.key,
                 sourceUid: firebaseUser.uid,
-                fx: f,
+                fx: sharedFx,
               }));
               firebase.database().ref(`rooms/${roomCode}/gameState/fxEvent`).set(event).catch(error => {
                 console.error('動畫同步失敗：', error);
@@ -1717,7 +1701,7 @@
               });
             }
             if (sticky) {
-              fxUntilRef.current = Infinity;
+              fxUntilRef.current = Date.now() + f.duration;
             } else {
               fxUntilRef.current = Date.now() + f.duration + f.hold;
               fxTimerRef.current = setTimeout(() => setFx(null), f.duration + f.hold + 60);
@@ -1739,7 +1723,7 @@
             const t = setTimeout(() => closeReplay(), (replay.fx.duration || 4000) + fxHold(replay.fx) + 500);
             return () => clearTimeout(t);
           }, [replay]);
-          // 等待器：至少等 minMs，且效果動畫（fxUntilRef）播完才執行 fn；點一下略過動畫時，所有等待器立即執行。
+          // 等待器：至少等 minMs，且效果動畫（fxUntilRef）播完才執行 fn；本機略過時可提前解除。
           // useFast：若剛略過動畫，這次等待直接歸零（下一位 AI 立即行動）。回傳取消函式。
           const waitersRef = useRef(new Set());
           const fastRef = useRef(false);
@@ -1764,36 +1748,13 @@
             w.timer = setTimeout(tick, 0);
             return () => { w.done = true; clearTimeout(w.timer); waitersRef.current.delete(w); };
           };
-          const skipFx = (publishDismissal = true) => {
-            const activeFx = fxRef.current;
+          const skipFx = () => {
             clearTimeout(fxTimerRef.current);
             fxUntilRef.current = 0;
             setFx(null);
             fastRef.current = true;
             [...waitersRef.current].forEach(w => w.run());
-            if (publishDismissal && onlineSession && roomCode && firebaseUser && activeFx?.key && !activeFx.privateTo?.length) {
-              firebase.database().ref(`rooms/${roomCode}/gameState/fxEvent`).update({
-                dismissedKey: activeFx.key,
-                dismissedBy: firebaseUser.uid,
-              }).catch(error => {
-                console.error('動畫略過同步失敗：', error);
-                setLobbyError(`動畫略過同步失敗：${error.message}`);
-              });
-            }
           };
-          skipFxRef.current = skipFx;
-          const publishFxFastForward = () => {
-            const activeFx = fxRef.current;
-            if (!onlineSession || !roomCode || !firebaseUser || !activeFx?.key || activeFx.privateTo?.length) return;
-            firebase.database().ref(`rooms/${roomCode}/gameState/fxEvent`).update({
-              fastForwardedKey: activeFx.key,
-              fastForwardedBy: firebaseUser.uid,
-            }).catch(error => {
-              console.error('動畫快轉同步失敗：', error);
-              setLobbyError(`動畫快轉同步失敗：${error.message}`);
-            });
-          };
-
           // 統一更新廣播與紀錄
           const logActionAndResult = (actionText, resultText, playerName = '系統', event = null, reveal = '', visibility = null) => {
             const fullAction = canonicalizePlayerText(actionText);
@@ -1817,18 +1778,28 @@
             } : null);
             if (event) setBroadcastEvent({ type: event, key: `${Date.now()}-${Math.random()}` });
             // 效果動畫：由動作行與結果行推導（純視覺；解析失敗就不播），並存進紀錄供回放
-            let f = null;
+            let publicFx = null;
+            let privateFx = null;
             if (!gameOverRef.current) {
-              try { f = deriveFx(fullAction, fullResult, fullReveal, stateRef.current); } catch (e) { console.warn('fx error', e); }
+              try {
+                publicFx = deriveFx(publicAction, publicResult, publicReveal, stateRef.current);
+                if (!visibility) publicFx = deriveFx(fullAction, fullResult, fullReveal, stateRef.current);
+              } catch (e) { console.warn('fx error', e); }
             }
-            if (f && visibility?.privateFx && visibility.privateTo?.length) {
+            if (visibility?.privateFx && visibility.privateTo?.length) {
               const hasHumanViewer = visibility.privateTo.some(id => {
                 const recipient = stateRef.current.players.find(player => player.id === id);
                 return recipient && !recipient.isAI;
               });
-              if (hasHumanViewer) f.privateTo = visibility.privateTo;
-              else f = null;
+              if (hasHumanViewer && !gameOverRef.current) {
+                try { privateFx = deriveFx(fullAction, fullResult, fullReveal, stateRef.current); } catch (e) { console.warn('private fx error', e); }
+                if (privateFx) {
+                  privateFx.privateTo = visibility.privateTo;
+                  privateFx.key = (publicFx || privateFx).key;
+                }
+              }
             }
+            const localFx = privateFx || publicFx;
             setHistoryLogs(prev => [
               {
                 id: `${Date.now()}-${Math.random()}`,
@@ -1839,11 +1810,12 @@
                 privateView,
                 event,
                 card: `${publicAction} ➔ ${publicResult}`,
-                fx: f,
+                fx: publicFx,
+                privateFx,
               },
               ...prev
             ]);
-            if (f) startFx(f);
+            if (localFx) startFx(localFx, publicFx);
           };
 
           // 暗牌追蹤：某人對某一格「拿一還一」（看過 + 換過）
@@ -1926,7 +1898,7 @@
               name,
               null,
               '',
-              { privateTo: [pid], privateFx: true, publicResult: '調整中央暗牌完成' }
+              { privateTo: [pid], privateFx: true, publicAction: `${name} 執行【拿一還一】`, publicResult: '調整中央暗牌完成' }
             );
             if (wolfWinAfterSwap(pid, [keep])) return true; // 第 3 張月亮後把狼人留在手上 ➔ 立刻獲勝
             advanceTurn();
@@ -2096,8 +2068,6 @@
               setWinnerInfo(snapshot.winnerInfo || null);
               setWins(snapshot.wins || {});
               setVictoryDismissed(!!snapshot.victoryDismissed);
-              const incomingFx = snapshot.fx || null;
-              setFx(incomingFx?.privateTo?.length && !incomingFx.privateTo.includes(humanPlayerId) ? null : incomingFx);
             });
           }, [roomData && roomData.gameState, screen, onlineSession, firebaseUser]);
 
@@ -2139,7 +2109,6 @@
                 winnerInfo,
                 wins,
                 victoryDismissed,
-                fx: fx?.privateTo?.length ? null : fx,
               }));
               try {
                 const ref = firebase.database().ref(`rooms/${roomCode}/gameState`);
@@ -2162,7 +2131,7 @@
             players, playerHands, deck, reserveCards, centerCards, centerMeta, watchLog, watchNote,
             currentTurnIndex, moonPhase, extraTurnPlayerId, witchTargetOwner, playedCardArena,
             broadcastAction, broadcastResult, broadcastReveal, broadcastEvent, broadcastPrivate, historyLogs, gameOver,
-            winnerInfo, wins, victoryDismissed, fx,
+            winnerInfo, wins, victoryDismissed,
           ]);
 
           // 全部角色牌參考清單
@@ -2761,7 +2730,7 @@
                 '你',
                 null,
                 '',
-                { privateTo: [humanPlayerId], privateFx: true, publicResult: '調整中央暗牌完成，回合結束' }
+                { privateTo: [humanPlayerId], privateFx: true, publicAction: '你 執行【拿一還一】', publicResult: '調整中央暗牌完成，回合結束' }
               );
               takenCardRef.current = null;
               takenSlotRef.current = null;
@@ -2976,7 +2945,7 @@
                   sourcePlayer.name,
                   null,
                   '',
-                  { privateTo: [sourceId], privateFx: true, publicResult: '秘密交換手牌完成' }
+                  { privateTo: [sourceId], privateFx: true, publicResult: `秘密交換了 ${a.name} 與 ${b.name} 的手牌` }
                 );
               }
               advanceTurn();
@@ -3008,7 +2977,7 @@
                   sourcePlayer.name,
                   null,
                   '',
-                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 打出了(${card.value})【先知】`, publicResult: '秘密檢視完成' }
+                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【先知】`, publicResult: '秘密檢視完成' }
                 );
                 advanceTurn();
                 break;
@@ -3022,7 +2991,7 @@
                   sourcePlayer.name,
                   null,
                   '',
-                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 打出了(2)【稅務官】`, publicResult: isHit ? `${randomTarget.name} 出局` : '秘密審查完成，無公開變化' }
+                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 對 ${randomTarget.name} 打出了(2)【稅務官】`, publicResult: isHit ? `${randomTarget.name} 出局` : '秘密審查完成，無公開變化' }
                 );
                 if (isHit) eliminatePlayer(randomTarget.id, sourceId, '稅務官審查出局');
                 advanceTurn();
@@ -3038,7 +3007,7 @@
                   sourcePlayer.name,
                   null,
                   '',
-                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 打出了(2)【審判官】`, publicResult: isHit ? `${randomTarget.name} 出局` : '秘密審判完成，無公開變化' }
+                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 對 ${randomTarget.name} 打出了(2)【審判官】`, publicResult: isHit ? `${randomTarget.name} 出局` : '秘密審判完成，無公開變化' }
                 );
                 if (isHit) eliminatePlayer(randomTarget.id, sourceId, '審判官審判出局');
                 advanceTurn();
@@ -3051,26 +3020,35 @@
                 const cardVal = 3;
                 const cardName = card.type === 'BARKEEPER' ? '酒保' : '小女孩';
                 const cmpType = card.type === 'BARKEEPER' ? '比大' : '比小';
+                const compareAction = `${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`;
+                const reportComparison = (fullResult, publicResult) => logActionAndResult(
+                  compareAction,
+                  fullResult,
+                  sourcePlayer.name,
+                  null,
+                  '',
+                  { privateTo: [sourceId], privateFx: true, publicResult }
+                );
                 if (sHand && tHand) {
                   if (card.type === 'BARKEEPER') {
                     if (sHand.value < tHand.value) {
-                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌較小出局！`, sourcePlayer.name);
+                      reportComparison(`${sourcePlayer.name}手牌較小出局！`, `${sourcePlayer.name}手牌較小出局`);
                       eliminatePlayer(sourceId, randomTarget.id, '酒保比大出局');
                     } else if (tHand.value < sHand.value) {
-                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌較小出局！`, sourcePlayer.name);
+                      reportComparison(`${randomTarget.name}手牌較小出局！`, `${randomTarget.name}手牌較小出局`);
                       eliminatePlayer(randomTarget.id, sourceId, '酒保比大出局');
                     } else {
-                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `平手無事發生`, sourcePlayer.name);
+                      reportComparison('雙方數值相同，平手無事發生', '秘密比大小完成，無公開變化');
                     }
                   } else {
                     if (sHand.value > tHand.value) {
-                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${sourcePlayer.name}手牌較大出局！`, sourcePlayer.name);
+                      reportComparison(`${sourcePlayer.name}手牌較大出局！`, `${sourcePlayer.name}手牌較大出局`);
                       eliminatePlayer(sourceId, randomTarget.id, '小女孩比小出局');
                     } else if (tHand.value > sHand.value) {
-                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `${randomTarget.name}手牌較大出局！`, sourcePlayer.name);
+                      reportComparison(`${randomTarget.name}手牌較大出局！`, `${randomTarget.name}手牌較大出局`);
                       eliminatePlayer(randomTarget.id, sourceId, '小女孩比小出局');
                     } else {
-                      logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${cardVal})【${cardName}】${cmpType}`, `平手無事發生`, sourcePlayer.name);
+                      reportComparison('雙方數值相同，平手無事發生', '秘密比大小完成，無公開變化');
                     }
                   }
                 }
@@ -3088,7 +3066,7 @@
                   sourcePlayer.name,
                   null,
                   '',
-                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 打出了(${card.value})【${card.title}】`, publicResult: '秘密交換手牌，獲得額外回合' }
+                  { privateTo: [sourceId], privateFx: true, publicAction: `${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【${card.title}】`, publicResult: '秘密交換手牌，獲得額外回合' }
                 );
                 setExtraTurnPlayerId(sourceId);
                 advanceTurn();
@@ -3196,7 +3174,7 @@
                 '你',
                 null,
                 '',
-                { privateTo: [humanPlayerId], privateFx: true, publicResult: '調整中央暗牌完成' }
+                { privateTo: [humanPlayerId], privateFx: true, publicAction: '你 打出了(3)【守夜人】', publicResult: '調整中央暗牌完成' }
               );
               if (wolfWinAfterSwap(humanPlayerId, [keptCard])) return; // 保留的是狼人（第 3 張月亮後）➔ 立刻獲勝
               advanceTurn();
@@ -3274,26 +3252,35 @@
               const sHand = (playerHands[humanPlayerId] || [])[0];
               const tHand = (playerHands[targetId] || [])[0];
               const cName = type === 'BARKEEPER' ? '酒保' : '小女孩';
+              const compareAction = `你 對 ${target.name} 打出了(3)【${cName}】${type === 'BARKEEPER' ? '比大' : '比小'}`;
+              const reportComparison = (fullResult, publicResult) => logActionAndResult(
+                compareAction,
+                fullResult,
+                '你',
+                null,
+                '',
+                { privateTo: [humanPlayerId], privateFx: true, publicResult }
+              );
               if (sHand && tHand) {
                 if (type === 'BARKEEPER') {
                   if (sHand.value < tHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `你的手牌(${sHand.value})較小 ➔ 你出局！`, '你');
+                    reportComparison(`你的手牌(${sHand.value})較小 ➔ 你出局！`, '你手牌較小出局');
                     eliminatePlayer(humanPlayerId, targetId, '酒保比大出局');
                   } else if (tHand.value < sHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, '你');
+                    reportComparison(`${target.name}手牌(${tHand.value})較小 ➔ ${target.name}出局！`, `${target.name}手牌較小出局`);
                     eliminatePlayer(targetId, humanPlayerId, '酒保比大出局');
                   } else {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比大`, `雙方數值相同 ➔ 平手無事發生`, '你');
+                    reportComparison('雙方數值相同 ➔ 平手無事發生', '秘密比大小完成，無公開變化');
                   }
                 } else {
                   if (sHand.value > tHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `你的手牌(${sHand.value})較大 ➔ 你出局！`, '你');
+                    reportComparison(`你的手牌(${sHand.value})較大 ➔ 你出局！`, '你手牌較大出局');
                     eliminatePlayer(humanPlayerId, targetId, '小女孩比小出局');
                   } else if (tHand.value > sHand.value) {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, '你');
+                    reportComparison(`${target.name}手牌(${tHand.value})較大 ➔ ${target.name}出局！`, `${target.name}手牌較大出局`);
                     eliminatePlayer(targetId, humanPlayerId, '小女孩比小出局');
                   } else {
-                    logActionAndResult(`你 對 ${target.name} 打出了(3)【${cName}】比小`, `雙方數值相同 ➔ 平手無事發生`, '你');
+                    reportComparison('雙方數值相同 ➔ 平手無事發生', '秘密比大小完成，無公開變化');
                   }
                 }
               }
@@ -3308,7 +3295,7 @@
                 '你',
                 null,
                 '',
-                { privateTo: [humanPlayerId], privateFx: true, publicAction: '你 打出了(7)【小偷】', publicResult: '秘密交換手牌，獲得額外回合' }
+                { privateTo: [humanPlayerId], privateFx: true, publicAction: `你 對 ${target.name} 打出了(7)【小偷】`, publicResult: '秘密交換手牌，獲得額外回合' }
               );
               setExtraTurnPlayerId(humanPlayerId);
               advanceTurn();
@@ -3325,7 +3312,7 @@
                 '你',
                 null,
                 '',
-                { privateTo: [humanPlayerId], privateFx: true, publicAction: '你 打出了(6)【扒手】', publicResult: '秘密交換手牌完成' }
+                { privateTo: [humanPlayerId], privateFx: true, publicAction: '你 打出了(6)【扒手】', publicResult: `秘密交換了 ${t1.name} 與 ${t2.name} 的手牌` }
               );
               advanceTurn();
             } else if (type === 'WITCH') {
@@ -3688,7 +3675,7 @@
             : (watchNote?.ownerId === humanPlayerId ? watchNote : null);
           const visibleHistoryLogs = historyLogs.map(log => {
             const privateView = log.privateView && log.privateView.playerIds?.includes(humanPlayerId) ? log.privateView : null;
-            const privateFx = log.fx?.privateTo?.length && !log.fx.privateTo.includes(humanPlayerId);
+            const privateFx = log.privateFx?.privateTo?.includes(humanPlayerId) ? log.privateFx : null;
             const legacySecret = !log.privateView && PRIVATE_TEXT_PATTERN.test(`${log.action || ''} ${log.result || log.card || ''}`);
             return {
               ...log,
@@ -3696,7 +3683,7 @@
               result: privateView ? privateView.result : (legacySecret ? '私密行動已完成' : log.result),
               reveal: privateView ? privateView.reveal : log.reveal,
               card: legacySecret ? (log.action || '私密行動已完成') : log.card,
-              fx: privateFx || legacySecret ? null : log.fx,
+              fx: legacySecret ? null : (privateFx || log.fx),
               isPrivateForViewer: !!privateView,
             };
           });
@@ -3906,7 +3893,7 @@
                       </div>
                     )}
                     {replay && replay.fx && <FxOverlay key={`r${replay.n}`} fx={replay.fx} onSkip={closeReplay} replay={{}} localPlayerId={humanPlayerId} />}
-                    {!replay && fx && (!fx.privateTo?.length || fx.privateTo.includes(humanPlayerId)) && !(gameOver && victoryDismissed) && <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} onFastForward={publishFxFastForward} fastForwardKey={fxFastForwardKey} localPlayerId={humanPlayerId} />}
+                    {!replay && fx && (!fx.privateTo?.length || fx.privateTo.includes(humanPlayerId)) && !(gameOver && victoryDismissed) && <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} localPlayerId={humanPlayerId} />}
                   </div>
                 </main>
 
