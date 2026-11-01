@@ -243,7 +243,14 @@
             const ph = mm ? Math.min(3, Math.max(1, parseInt(mm[1], 10))) : 1;
             const msrc = st && st.players ? (st.players.find(p => p.name === mn[1]) || null) : null;
             const dur = ph >= 3 ? 4200 : 3200;
-            return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: mn[2], value: '🌙', icon: 'fa-moon' }, src: msrc, tgt: null, tone: 'ok', phase: ph, baseDur: dur, duration: dur };
+            // 第 3 張月亮：場上有人手握狼人 ➔ 月光中出現狼的剪影；狼人已被淘汰（面前有狼人牌）或無人手握 ➔ 沒有狼人
+            let wolf = 'none';
+            if (ph >= 3 && st && st.players) {
+              const held = st.players.some(p => p.status === '存活' && ((st.playerHands || {})[p.id] || []).some(c => c && c.title === '狼人'));
+              const outW = st.players.some(p => (p.playedCards || []).some(c => c && c.title === '狼人'));
+              wolf = held ? 'held' : (outW ? 'out' : 'none');
+            }
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: mn[2], value: '🌙', icon: 'fa-moon' }, src: msrc, tgt: null, tone: 'ok', phase: ph, wolf, baseDur: dur, duration: dur };
           }
           const sv = /^(\S+) 棄掉面前【僕人】/.exec(String(actionText || ''));
           if (sv && st && st.players) {
@@ -429,6 +436,16 @@
             </div>
           );
         }
+        // 最終比點數用的精簡牌面：只有數值與牌名（不放中間圖案），避免字太大放不下
+        function FxFaceMini({ c, cls = 'w-10 h-[44px]' }) {
+          if (!c) return <FxBack cls={cls} />;
+          return (
+            <div className={`${cls} shrink-0 overflow-hidden rounded-md border-2 border-amber-400 bg-slate-900 flex flex-col items-center justify-center shadow-lg`}>
+              <span className="font-mono font-black text-amber-300 text-sm leading-none">{c.value}</span>
+              <span className="text-[8px] font-black text-amber-200 leading-none whitespace-nowrap mt-1 tracking-tighter">{c.title}</span>
+            </div>
+          );
+        }
         function FxStamp({ tone, text, delay = 1.5 }) {
           if (!text) return null;
           return (
@@ -559,14 +576,19 @@
                   <path d="M0 40 Q40 14 80 36 T150 30 T220 38 T270 24 L270 84 L0 84 Z" fill="#05060f" />
                   <path d="M0 62 Q60 44 120 58 T270 52 L270 84 L0 84 Z" fill="#02030a" />
                 </svg>
-                {red && <span className="absolute left-[30px] bottom-[50px] text-3xl" style={{ filter: 'brightness(0)', ...an('fxPop', 0.5, 2.0) }}>🐺</span>}
+                {red && (fx.wolf === 'held'
+                  ? <span className="absolute left-1/2 -ml-[22px] bottom-[84px] text-[44px] leading-none" style={{ filter: 'brightness(0)', ...an('fxPop', 0.5, 2.0) }}>🐺</span>
+                  : <span className="absolute left-1/2 -ml-[22px] bottom-[84px] w-[44px] h-[44px] flex items-center justify-center" style={an('fxPop', 0.5, 2.0)}>
+                      <span className="text-[44px] leading-none opacity-25" style={{ filter: 'brightness(0)' }}>🐺</span>
+                      <i className="fa-solid fa-ban absolute text-slate-300 text-3xl"></i>
+                    </span>)}
                 <div className="absolute top-2 inset-x-0 text-center" style={an('fxFadeUp', 0.5, 0.1)}>
                   <div className="text-[10px] text-slate-300 font-bold">{src ? src.name : ''} 翻開了</div>
                   <div className={`text-sm font-black tracking-widest ${red ? 'text-rose-300' : 'text-amber-200'}`}>{mnames[ph - 1] || card.title}</div>
                 </div>
                 <div className="absolute bottom-2 inset-x-0 flex flex-col items-center gap-0.5" style={an('fxPop', 0.4, 1.4)}>
                   <div className="flex gap-1.5">{[1, 2, 3].map(i => <i key={i} className={`fa-solid fa-moon text-sm ${i <= ph ? (red ? 'text-rose-300' : 'text-amber-300') : 'text-slate-600'}`}></i>)}</div>
-                  <div className={`text-[10px] font-black ${red ? 'text-rose-200' : 'text-slate-200'}`}>月亮 {ph}/3{red ? '・狼月降臨' : ''}</div>
+                  <div className={`text-[10px] font-black ${red ? 'text-rose-200' : 'text-slate-200'}`}>月亮 {ph}/3{red ? (fx.wolf === 'held' ? '・狼月降臨' : (fx.wolf === 'out' ? '・狼人已被淘汰，無人掌控狼月' : '・無人手握狼人')) : ''}</div>
                 </div>
               </div>
             );
@@ -588,9 +610,9 @@
                       <div className="relative flex items-center gap-1.5 px-1.5 py-0.5 rounded-lg bg-slate-900/70 border border-slate-700/60" style={r.win ? { animation: `fxWinGlow .6s ease-out ${tWin}s both` } : { animation: `fxDim .5s linear ${tWin}s both` }}>
                         <Avatar p={r.p} size="w-6 h-6 text-xs" />
                         <span className={`w-12 truncate text-[10px] font-black ${r.p.id === 0 ? 'text-sky-300' : 'text-slate-100'}`}>{r.p.name}</span>
-                        <div className="relative w-9 h-[46px] shrink-0">
-                          <div className="absolute inset-0" style={an('fxFlipOut', 0.2, r.t - 0.05, 'ease-in')}><FxBack cls="w-9 h-[46px]" /></div>
-                          <div className="absolute inset-0" style={an('fxFlipIn', 0.3, r.t + 0.1, 'ease-out')}><FxFace c={r.card} cls="w-9 h-[46px]" /></div>
+                        <div className="relative w-10 h-[44px] shrink-0">
+                          <div className="absolute inset-0" style={an('fxFlipOut', 0.2, r.t - 0.05, 'ease-in')}><FxBack cls="w-10 h-[44px]" /></div>
+                          <div className="absolute inset-0" style={an('fxFlipIn', 0.3, r.t + 0.1, 'ease-out')}><FxFaceMini c={r.card} cls="w-10 h-[44px]" /></div>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="h-2.5 rounded bg-slate-800 overflow-hidden">
@@ -883,12 +905,19 @@
           return (
             <div
               className={`${replay ? 'fx-hold' : ''} absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
-              style={replay ? undefined : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` }}
+              style={replay ? undefined : (fx.sticky ? { animation: 'fxIn .25s linear both' } : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` })}
               onClick={isNone ? undefined : onSkip}
             >
               <div ref={bodyRef} className="contents">{body}</div>
               {replay && <span className="absolute top-1 left-2 z-20 text-[9px] font-black text-amber-300 bg-slate-900/80 border border-amber-500/40 rounded-full px-2 py-0.5 pointer-events-none">回放</span>}
-              {!isNone && <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">{replay ? '點一下離開' : '點一下略過'}</span>}
+              {!isNone && (replay
+                ? <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">點一下離開</span>
+                : (<>
+                    <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none" style={{ animation: `fxOut .2s linear ${fx.duration / 1000}s forwards` }}>點一下略過</span>
+                    <span className="absolute bottom-1 inset-x-0 text-center pointer-events-none" style={{ animation: `fxIn .3s linear ${fx.duration / 1000}s both` }}>
+                      <span className="animate-pulse inline-block text-[10px] font-black text-amber-300 bg-slate-950/80 border border-amber-500/50 rounded-full px-2.5 py-0.5">👆 點一下繼續</span>
+                    </span>
+                  </>))}
             </div>
           );
         }
@@ -971,7 +1000,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.9 M');
+          const [version] = useState('v0.0.11 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -998,6 +1027,7 @@
           const [playerHands, setPlayerHands] = useState({});
           const [centerCards, setCenterCards] = useState([]);
           const [playedCardArena, setPlayedCardArena] = useState(null);
+          const [showBroadcast, setShowBroadcast] = useState(false); // C 區頂部「動態」廣播：預設隱藏
           const [fx, setFx] = useState(null);          // C 區效果動畫
           const fxTimerRef = useRef(null);
           const fxUntilRef = useRef(0);
@@ -1060,12 +1090,18 @@
 
           // 效果動畫：啟動／略過
           const startFx = (f0) => {
-            const f = { ...f0, duration: Math.round(f0.duration * slow()), hold: Math.round(fxHold(f0) * slow()) };
+            // 動畫播完後停在最後一格，直到玩家點一下才離開；AI／換人的等待也一併等這一下（略過＝點一下）
+            const sticky = f0.kind !== 'none';
+            const f = { ...f0, duration: Math.round(f0.duration * slow()), hold: sticky ? 0 : Math.round(fxHold(f0) * slow()), sticky };
             clearTimeout(fxTimerRef.current);
             fastRef.current = false;
             setFx(f);
-            fxUntilRef.current = Date.now() + f.duration + f.hold;
-            fxTimerRef.current = setTimeout(() => setFx(null), f.duration + f.hold + 60);
+            if (sticky) {
+              fxUntilRef.current = Infinity;
+            } else {
+              fxUntilRef.current = Date.now() + f.duration + f.hold;
+              fxTimerRef.current = setTimeout(() => setFx(null), f.duration + f.hold + 60);
+            }
           };
           useEffect(() => {
             if (!gameOver) { setVictoryReady(false); return; }
@@ -2366,6 +2402,7 @@
                     </span>
                   </div>
                   <div className="flex items-center space-x-1.5">
+                    <button onClick={() => setShowBroadcast(v => !v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${showBroadcast ? 'bg-emerald-500/25 border-emerald-400/70 text-emerald-200' : 'bg-slate-800/90 border-slate-600/60 text-slate-400'}`}>動態</button>
                     {[0.5].map(v => (
                       <button key={v} onClick={() => changeSpeed(v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-mono font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${speed === v ? 'bg-sky-500/25 border-sky-400/80 text-sky-200' : 'bg-slate-800/90 border-slate-500/50 text-slate-400'}`}>{v}x</button>
                     ))}
@@ -2433,7 +2470,7 @@
                   )}
 
                   {/* C區頂部欄：雙行動態中控廣播（簡報 + 最終結果） */}
-                  <div className="w-full z-10 mb-1 px-1">
+                  {showBroadcast && <div className="w-full z-10 mb-1 px-1">
                     <div key={broadcastEvent ? broadcastEvent.key : 'plain'} className={`w-full bg-slate-900/95 border p-2 rounded-xl shadow-lg flex flex-col justify-center ${broadcastEvent ? (broadcastEvent.type === 'out' ? 'event-out' : 'event-revive') : 'border-emerald-500/50'}`}>
                       <div className="flex items-center space-x-1.5 overflow-hidden">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
@@ -2451,7 +2488,7 @@
                         <div className="text-[10px] font-bold text-fuchsia-300 line-clamp-2 pl-3.5 mt-0.5"><i className="fa-solid fa-eye mr-1"></i><RichLog text={broadcastReveal} nameClass="text-fuchsia-100" /></div>
                       )}
                     </div>
-                  </div>
+                  </div>}
 
                   {/* 場上卡牌展示 */}
                   <div className="w-full flex-1 flex items-center justify-center relative z-10">
@@ -2531,17 +2568,17 @@
                     ) : playedCardArena ? (
                       <div key={playedCardArena.id} className="relative group animate-card-play scale-[0.85] origin-center -my-2">
                         <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 to-red-600 rounded-2xl blur-md opacity-75 transition duration-1000"></div>
-                        <div className="relative w-48 h-64 bg-slate-900 border-2 border-amber-400 rounded-xl p-3 flex flex-col justify-between shadow-2xl overflow-hidden">
+                        <div className="relative w-36 h-[190px] bg-slate-900 border-2 border-amber-400 rounded-xl p-2.5 flex flex-col justify-between shadow-2xl overflow-hidden">
                           <div className="flex justify-between items-start">
-                            <span className="bg-amber-500 text-slate-950 text-base font-black w-8 h-8 rounded-full flex items-center justify-center shadow font-mono">{playedCardArena.value}</span>
+                            <span className="bg-amber-500 text-slate-950 text-sm font-black w-7 h-7 rounded-full flex items-center justify-center shadow font-mono">{playedCardArena.value}</span>
                             {playedCardArena.isMoon && <span className="text-[10px] bg-slate-800 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">{playedCardArena.category}</span>}
                           </div>
-                          <div className="w-full h-24 my-1 rounded-lg bg-slate-800 border border-slate-700/70 flex items-center justify-center relative overflow-hidden">
-                            <i className={`fa-solid ${playedCardArena.icon} text-5xl text-amber-400/80 filter drop-shadow`}></i>
+                          <div className="w-full h-16 my-1 rounded-lg bg-slate-800 border border-slate-700/70 flex items-center justify-center relative overflow-hidden">
+                            <i className={`fa-solid ${playedCardArena.icon} text-4xl text-amber-400/80 filter drop-shadow`}></i>
                           </div>
                           <div className="text-center">
-                            <h3 className="text-base font-black text-amber-300 tracking-wide">{playedCardArena.title}</h3>
-                            <p className="text-[10px] text-slate-300 line-clamp-2 mt-0.5 leading-tight">{playedCardArena.desc}</p>
+                            <h3 className="text-sm font-black text-amber-300 tracking-wide">{playedCardArena.title}</h3>
+                            <p className="text-[9px] text-slate-300 line-clamp-2 mt-0.5 leading-tight">{playedCardArena.desc}</p>
                           </div>
                           <div className="pt-1.5 border-t border-amber-500/40 flex justify-between items-center text-[10px] mt-0.5">
                             <span className="text-amber-400 font-bold flex items-center gap-0.5">
