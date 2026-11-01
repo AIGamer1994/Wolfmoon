@@ -385,10 +385,10 @@
         function FxFace({ c, cls = 'w-11 h-[60px]' }) {
           if (!c) return <FxBack cls={cls} />;
           return (
-            <div className={`${cls} rounded-md border-2 border-amber-400 bg-slate-900 flex flex-col items-center justify-center shadow-lg`}>
+            <div className={`${cls} shrink-0 overflow-hidden rounded-md border-2 border-amber-400 bg-slate-900 flex flex-col items-center justify-center shadow-lg`}>
               <span className="font-mono font-black text-amber-300 text-base leading-none">{c.value}</span>
               <i className={`fa-solid ${c.icon || 'fa-circle'} text-amber-400/80 text-sm my-0.5`}></i>
-              <span className="text-[9px] font-black text-amber-200 leading-none">{c.title}</span>
+              <span className="text-[9px] font-black text-amber-200 leading-none whitespace-nowrap">{c.title}</span>
             </div>
           );
         }
@@ -542,8 +542,8 @@
                 </div>
                 <div className="col-start-1 row-start-1 flex flex-col items-center gap-2">
                   <div className="flex items-center gap-1.5" style={an('fxPop', 0.4, T)}>
-                    <FxFace c={card} cls="w-9 h-[48px]" />
-                    <span className="text-amber-300 font-black text-sm">{fx.mode}</span>
+                    <FxFace c={card} cls="w-12 h-[64px]" />
+                    <span className="text-amber-300 font-black text-sm whitespace-nowrap">{fx.mode}</span>
                   </div>
                   <div className="relative flex items-center justify-center gap-3">
                     {col(src, 'L')}
@@ -741,7 +741,7 @@
           return (
             <div
               className={`${replay ? 'fx-hold' : ''} absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
-              style={replay ? undefined : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + fxHold(fx) - 300) / 1000}s forwards` }}
+              style={replay ? undefined : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` }}
               onClick={isNone ? undefined : onSkip}
             >
               <div ref={bodyRef} className="contents">{body}</div>
@@ -829,7 +829,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.4 M');
+          const [version] = useState('v0.0.5 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -884,6 +884,7 @@
           const [actionLocked, setActionLocked] = useState(false);
           const lockRef = useRef(false);
           const [aiPaused, setAiPaused] = useState(false);
+          const [seerSeen, setSeerSeen] = useState(null); // 先知看過的 { targetId, card }（只有玩家自己看得到）
           // 速度：1＝正常，0.5／0.25＝放慢（AI 等待、月亮停留、效果動畫都按倍數拉長）；再點一次同一顆回到 1x
           const [speed, setSpeed] = useState(1);
           const speedRef = useRef(1);
@@ -916,11 +917,11 @@
 
           // 效果動畫：啟動／略過
           const startFx = (f0) => {
-            const f = slow() === 1 ? f0 : { ...f0, duration: Math.round(f0.duration * slow()) };
+            const f = { ...f0, duration: Math.round(f0.duration * slow()), hold: Math.round(fxHold(f0) * slow()) };
             clearTimeout(fxTimerRef.current);
             setFx(f);
-            fxUntilRef.current = Date.now() + f.duration + fxHold(f);
-            fxTimerRef.current = setTimeout(() => setFx(null), f.duration + fxHold(f) + 60);
+            fxUntilRef.current = Date.now() + f.duration + f.hold;
+            fxTimerRef.current = setTimeout(() => setFx(null), f.duration + f.hold + 60);
           };
           // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
           const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
@@ -1080,6 +1081,7 @@
             clearTimeout(fxTimerRef.current);
             fxUntilRef.current = 0;
             setReplay(null);
+            setSeerSeen(null);
             setFx(null);
             setWitchTargetOwner(null);
             setIsReturningCenterCard(false);
@@ -1550,7 +1552,7 @@
             setPlayers(prev => prev.map(p => p.id === playerId ? { ...p, protected: card?.type === 'BODYGUARD', playedCards: [...p.playedCards, card] } : p));
             setPlayedCardArena({ ...card, playedBy: player.name });
             // 延後結算，確保讀到已更新的手牌與面前牌
-            setTimeout(() => { if (!gameOverRef.current && resolveRef.current) resolveRef.current(playerId, card); }, 500);
+            setTimeout(() => { if (!gameOverRef.current && resolveRef.current) resolveRef.current(playerId, card); }, 500 * slow());
           };
 
           const resolveCardEffect = (sourceId, card) => {
@@ -1902,7 +1904,8 @@
               const cName = targetHand[0] ? targetHand[0].title : '無';
               const cVal = targetHand[0] ? targetHand[0].value : '?';
               logActionAndResult(`你 對 ${target.name} 打出了(2)【先知】`, `秘密檢視結果 ➔ ${target.name} 手牌為 ${cName}(${cVal})`, '你');
-              setInteractionModal({ type: 'INFO', title: '先知檢視結果', message: `玩家 ${target.name} 的手牌為：${cName} (數值 ${cVal})` });
+              setSeerSeen(targetHand[0] ? { targetId, card: targetHand[0] } : null);
+              setInteractionModal({ type: 'INFO', title: '先知檢視結果', infoCard: targetHand[0] || null, infoTarget: target });
               return;
               advanceTurn();
             } else if (type === 'TAX_COLLECTOR') {
@@ -2406,13 +2409,33 @@
                     </div>
                   )}
 
+                  {/* D區左下：先知看過的玩家與牌（目標之後換過手牌則變淡並標「舊資訊」） */}
+                  {seerSeen && (() => {
+                    const tp = players.find(p => p.id === seerSeen.targetId);
+                    if (!tp) return null;
+                    const nowCard = (playerHands[tp.id] || []).filter(Boolean)[0];
+                    const stale = tp.status !== '存活' || !nowCard || nowCard.id !== seerSeen.card.id;
+                    const c = seerSeen.card;
+                    return (
+                      <div className={`absolute left-1.5 bottom-1.5 z-30 flex flex-col items-center gap-0.5 pointer-events-none ${stale ? 'opacity-50' : ''}`}>
+                        <span className="text-[7px] leading-none font-black text-sky-300"><i className="fa-solid fa-eye mr-0.5"></i>先知{stale ? '・舊資訊' : ''}</span>
+                        <FxChip p={tp} size="w-7 h-7 text-sm" />
+                        <div className="w-9 h-[50px] shrink-0 overflow-hidden rounded-md border-2 border-cyan-500/80 bg-slate-900 flex flex-col items-center justify-center shadow">
+                          <span className="font-mono font-black text-amber-300 text-[11px] leading-none">{c.value}</span>
+                          <i className={`fa-solid ${c.icon || 'fa-circle'} text-cyan-400 text-[11px] my-0.5`}></i>
+                          <span className="text-[7px] font-black text-slate-100 leading-none whitespace-nowrap">{c.title}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* D區左側：自己所有放在「面前」的牌（簡約顯示；絕對定位，不影響版面） */}
                   {(() => {
                     const me = players[0] || { playedCards: [] };
                     const front = getFrontCards(me);
                     if (front.length === 0) return null;
                     return (
-                      <div className="absolute left-1.5 top-2 bottom-1.5 z-30 flex flex-col justify-start items-start gap-0.5 pointer-events-none overflow-hidden">
+                      <div className="absolute left-1.5 top-2 z-30 flex flex-col justify-start items-start gap-0.5 pointer-events-none overflow-hidden" style={{ bottom: seerSeen ? 108 : 6 }}>
                         <span className="text-[8px] leading-none text-slate-400">🃏 面前 {front.length}</span>
                         {front.map((c, i) => {
                           const active = isCardActive(me, c);
@@ -2941,7 +2964,24 @@
 
                 {modal.type === 'INFO' ? (
                   <div>
-                    <p className="text-xs text-slate-300 mb-4 whitespace-pre-line">{modal.message}</p>
+                    {modal.infoTarget && (
+                      <div className="flex flex-col items-center gap-2 mb-4">
+                        <FxChip p={modal.infoTarget} size="w-11 h-11 text-xl" />
+                        {modal.infoCard ? (
+                          <div className="w-[130px] h-[180px] bg-slate-900 border-2 border-cyan-500/80 rounded-xl p-2 flex flex-col justify-between shadow-[0_0_12px_rgba(6,182,212,0.3)]">
+                            <span className="bg-cyan-500 text-slate-950 text-sm font-black w-6 h-6 rounded-full flex items-center justify-center font-mono">{modal.infoCard.value}</span>
+                            <div className="w-full h-16 bg-slate-800/90 rounded-lg border border-slate-700/60 flex items-center justify-center my-1">
+                              <i className={`fa-solid ${modal.infoCard.icon} text-3xl text-cyan-400`}></i>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-xs font-black text-slate-100 truncate tracking-wide">{modal.infoCard.title}</div>
+                              <div className="text-[8.5px] text-slate-300 line-clamp-3 leading-tight mt-0.5">{modal.infoCard.desc}</div>
+                            </div>
+                          </div>
+                        ) : <span className="text-xs text-slate-400">無手牌</span>}
+                      </div>
+                    )}
+                    {modal.message && <p className="text-xs text-slate-300 mb-4 whitespace-pre-line">{modal.message}</p>}
                     <button onClick={onCancel} className="w-full bg-emerald-600 text-white text-xs py-2 rounded-xl font-bold">確定</button>
                   </div>
                 ) : modal.type === 'SERVANT_CHOICE' ? (
