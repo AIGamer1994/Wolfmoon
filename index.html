@@ -55,7 +55,8 @@
         .event-revive { border-color: #34d399; box-shadow: 0 0 10px 2px rgba(52,211,153,.5); animation: flash-revive 0.9s ease-in-out 3; }
 
         /* 效果動畫（C 區疊層） */
-        .fx-layer { animation: fxLife var(--fx-dur, 2.4s) linear both; }
+        @keyframes fxIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+        @keyframes fxOut { 0% { opacity: 1; } 100% { opacity: 0; } }
         @keyframes fxLife { 0% { opacity: 0; } 6% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
         @keyframes fxPop { 0% { opacity: 0; transform: scale(.3) translateY(18px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
         @keyframes fxFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
@@ -217,6 +218,8 @@
           '陰謀家': '手握此牌被淘汰時才會發動',
           '叛徒': '手握此牌狼人獲勝時才發動',
         };
+        // 動畫播完後最後一格多停留的時間：無任何效果（置於面前）停 2 秒，其他動畫停 1 秒
+        const fxHold = (f) => (f && f.kind === 'place' ? 2000 : 1000);
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
         const FX_TOTAL_BY = { compare: 5500, grave: 4600, place: 4000, servant: 4000 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
@@ -737,8 +740,8 @@
 
           return (
             <div
-              className={`${replay ? 'fx-hold' : 'fx-layer'} absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
-              style={replay ? undefined : { '--fx-dur': `${fx.duration / 1000}s` }}
+              className={`${replay ? 'fx-hold' : ''} absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
+              style={replay ? undefined : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + fxHold(fx) - 300) / 1000}s forwards` }}
               onClick={isNone ? undefined : onSkip}
             >
               <div ref={bodyRef} className="contents">{body}</div>
@@ -826,7 +829,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.3 M');
+          const [version] = useState('v0.0.4 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -916,8 +919,8 @@
             const f = slow() === 1 ? f0 : { ...f0, duration: Math.round(f0.duration * slow()) };
             clearTimeout(fxTimerRef.current);
             setFx(f);
-            fxUntilRef.current = Date.now() + f.duration;
-            fxTimerRef.current = setTimeout(() => setFx(null), f.duration + 60);
+            fxUntilRef.current = Date.now() + f.duration + fxHold(f);
+            fxTimerRef.current = setTimeout(() => setFx(null), f.duration + fxHold(f) + 60);
           };
           // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
           const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
@@ -925,7 +928,7 @@
           const closeReplay = () => { setReplay(null); setIsHistoryModalOpen(true); };
           useEffect(() => {
             if (!replay || !replay.fx) return;
-            const t = setTimeout(() => closeReplay(), (replay.fx.duration || 4000) + 500);
+            const t = setTimeout(() => closeReplay(), (replay.fx.duration || 4000) + fxHold(replay.fx) + 500);
             return () => clearTimeout(t);
           }, [replay]);
           const skipFx = () => {
@@ -2296,10 +2299,10 @@
                       </button>
                       <button
                         onClick={() => setIsDeckModalOpen(true)}
-                        className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-cyan-500/40 hover:border-cyan-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
+                        className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
                       >
-                        <i className="fa-solid fa-layer-group text-cyan-400"></i>
-                        <span className="font-bold text-cyan-300">牌庫 <span className="font-mono text-cyan-400">{deck.length}</span></span>
+                        <i className="fa-solid fa-layer-group text-amber-400"></i>
+                        <span className="font-bold text-amber-300">牌庫 <span className="font-mono text-amber-400">{deck.length}</span></span>
                       </button>
                       <div className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-cyan-500/40 px-2 rounded-full text-[9.5px] shadow">
                         <i className="fa-solid fa-box-archive text-cyan-400"></i>
