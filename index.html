@@ -113,17 +113,8 @@
 
         @keyframes fxMoonRise { 0% { transform: translateY(150px) scale(.8); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
         @keyframes fxRedPulse { 0% { opacity: .35; } 100% { opacity: 1; } }
-        /* 狼月降臨：狼人撲咬演出 */
-        @keyframes fxDraw { 0% { stroke-dashoffset: 100; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
-        @keyframes fxClawFade { 0% { opacity: 1; } 100% { opacity: .25; } }
+        /* 狼月降臨：咬向鏡頭演出 */
         @keyframes fxFlashW { 0% { opacity: .6; } 100% { opacity: 0; } }
-        @keyframes fxEyeApproach {
-          0% { opacity: 0; transform: scale(.45); }
-          14% { opacity: 1; transform: scale(.5); }
-          55% { opacity: 1; transform: scale(.7); }
-          100% { opacity: 1; transform: scale(3.4); }
-        }
-        @keyframes fxBlink { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.08); } }
         @keyframes fxJawOpenT { 0% { transform: translateY(-110%); } 100% { transform: translateY(-60%); } }
         @keyframes fxJawOpenB { 0% { transform: translateY(110%); } 100% { transform: translateY(60%); } }
         @keyframes fxJawSlamT { 0% { transform: translateY(-60%); } 100% { transform: translateY(0); } }
@@ -186,7 +177,7 @@
           { title: '刺客', desc: '選擇一位玩家，猜其手牌數值 0–10；您有2次猜測機會。猜中使其出局。', value: 0, icon: 'fa-user-secret', category: '數值 0', totalCount: 1, type: 'ASSASSIN' },
           { title: '乞丐之王', desc: '當牌庫耗盡時，若您手握此牌且有玩家手牌為8或9，您獨享勝利。', value: 0, icon: 'fa-crown', category: '數值 0', totalCount: 1, type: 'PASSIVE' },
           { title: '村民', desc: '選擇一位玩家，猜其手牌數值 0–10；猜中使其出局。', value: 1, icon: 'fa-person', category: '數值 1', totalCount: 4, type: 'VILLAGER' },
-          { title: '醉漢', desc: '收集所有存活玩家手牌，洗勻後隨機發回每人1張。', value: 1, icon: 'fa-wine-bottle', category: '數值 1', totalCount: 1, type: 'DRUNKARD' },
+          { title: '醉漢', desc: '收集所有存活玩家手牌並秘密檢視，洗勻後隨機發回每人1張。', value: 1, icon: 'fa-wine-bottle', category: '數值 1', totalCount: 1, type: 'DRUNKARD' },
           { title: '僕人', desc: '回合結束時可棄掉面前的僕人，立刻進行額外回合。', value: 1, icon: 'fa-bell-concierge', category: '數值 1', totalCount: 1, type: 'SERVANT' },
           { title: '先知', desc: '秘密檢視一位對手的手牌。', value: 2, icon: 'fa-eye', category: '數值 2', totalCount: 1, type: 'SEER' },
           { title: '稅務官', desc: '指定一位玩家，若其手牌為 0 或 1，該玩家出局。', value: 2, icon: 'fa-coins', category: '數值 2', totalCount: 1, type: 'TAX_COLLECTOR' },
@@ -236,7 +227,7 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2100, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200 };
+        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2100, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, wolfbite: 4300 };
         // 被動牌打出時「沒有任何效果（原因）」的原因（動態廣播、行動紀錄、置於面前動畫共用）
         const PASSIVE_WHY = {
           '乞丐之王': '結算時才發動',
@@ -251,7 +242,7 @@
         const fxHold = (f) => (f && f.kind === 'place' ? 2000 : (f && f.kind === 'moon' ? 800 : 1000));
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
-        const FX_TOTAL_BY = { compare: 7000, grave: 4600, place: 4000, servant: 4000, drunk: 5000 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
+        const FX_TOTAL_BY = { compare: 7000, grave: 4600, place: 4000, servant: 4000, drunk: 5000, wolfbite: 4300 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -266,7 +257,7 @@
             const mm = /(\d)\/3/.exec(String(resultText || ''));
             const ph = mm ? Math.min(3, Math.max(1, parseInt(mm[1], 10))) : 1;
             const msrc = st && st.players ? (st.players.find(p => p.name === mn[1]) || null) : null;
-            // 第 3 張月亮：場上有人手握狼人 ➔ 月光中出現狼的剪影，之後播狼人撲咬鏡頭演出（較長）；狼人已被淘汰（面前有狼人牌）或無人手握 ➔ 沒有狼人
+            // 第 3 張月亮：場上有人手握狼人 ➔ 紅月之後直接播「咬向鏡頭」演出（較長）；狼人已被淘汰（面前有狼人牌）或無人手握 ➔ 沒有狼人
             let wolf = 'none', wolfWinner = null, traitorWinner = null;
             if (ph >= 3 && st && st.players) {
               st.players.filter(p => p.status === '存活').forEach(p => {
@@ -279,8 +270,18 @@
               wolf = wolfWinner ? 'held' : (outW ? 'out' : 'none');
               if (!wolfWinner) traitorWinner = null;
             }
-            const dur = ph >= 3 ? (wolf === 'held' ? 9300 : 4200) : 3200;
+            const dur = ph >= 3 ? (wolf === 'held' ? 6800 : 4200) : 3200;
             return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: mn[2], value: '🌙', icon: 'fa-moon' }, src: msrc, tgt: null, tone: 'ok', phase: ph, wolf, wolfWinner, traitorWinner, baseDur: dur, duration: dur };
+          }
+          // 第 3 張月亮翻開後，有人用拿一還一／守夜人把狼人留在手上 ➔ 直接播咬鏡頭演出
+          const wb = /^(\S+) 手握【狼人】/.exec(String(actionText || ''));
+          if (wb && st && st.players) {
+            const wsrc = st.players.find(p => p.name === wb[1]) || null;
+            let wtraitor = null;
+            st.players.filter(p => p.status === '存活' && (!wsrc || p.id !== wsrc.id)).forEach(p => {
+              if (((st.playerHands || {})[p.id] || []).some(c => c && c.title === '叛徒')) wtraitor = p;
+            });
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'wolfbite', card: { title: '狼人', value: 10, icon: 'fa-paw' }, src: wsrc, tgt: null, tone: 'ok', phase: 3, wolf: 'held', wolfWinner: wsrc, traitorWinner: wtraitor, baseDur: FX_DURATION.wolfbite, duration: FX_TOTAL_BY.wolfbite };
           }
           const sv = /^(\S+) 棄掉面前【僕人】/.exec(String(actionText || ''));
           if (sv && st && st.players) {
@@ -489,7 +490,29 @@
         function FxOverlay({ fx, onSkip, replay }) {
           const { kind, card, src, tgt } = fx;
           const bodyRef = React.useRef(null);
+          const rootRef = React.useRef(null);
+          const doneRef = React.useRef(false); // 動畫是否已播到最後一格（播完或已被點一下快轉）
           const slotRef = React.useRef(null), stolenRef = React.useRef(null), tgtRef = React.useRef(null);
+          // 動畫自然播完的時間點（與「點一下略過」標籤消失、「點一下繼續」出現同一刻）
+          React.useEffect(() => {
+            doneRef.current = false;
+            if (replay) return;
+            const t = setTimeout(() => { doneRef.current = true; }, Math.max(0, fx.duration || 0));
+            return () => clearTimeout(t);
+          }, []);
+          // 點一下：動畫還在播 ➔ 直接快轉到最後一格（不離開）；已在最後一格 ➔ 才真正離開／繼續
+          const handleClick = () => {
+            if (replay || doneRef.current) { onSkip(); return; }
+            doneRef.current = true;
+            const root = rootRef.current;
+            if (!root || !root.getAnimations) { onSkip(); return; }
+            root.getAnimations({ subtree: true }).forEach(a => {
+              try { a.finish(); } catch (e) {
+                // 無限循環的動畫（如紅光脈動）無法 finish：跳到第一輪結束處，讓它從最後狀態接著播
+                try { const ct = a.effect.getComputedTiming(); a.currentTime = (ct.delay || 0) + (ct.duration || 0); } catch (_) {}
+              }
+            });
+          };
           // 掘墓人：量出「目標頭像」到「出牌者左邊空位」的距離，讓奪取的牌從目標那邊滑過來
           React.useLayoutEffect(() => {
             const sl = slotRef.current, tg = tgtRef.current, el = stolenRef.current;
@@ -507,6 +530,7 @@
           const an = (name, dur, delay, ease = 'cubic-bezier(.2,.9,.3,1.15)') => ({ animation: `${name} ${dur}s ${ease} ${delay}s both` });
           const stamp = (delay) => <FxStamp tone={fx.stampTone} text={fx.stampText} delay={delay} />;
           const isNone = kind === 'none';
+          let revealAt = 2.2; // 淘汰者公開手牌出現的時間（在「淘汰」章之後）
           let body = null;
 
           if (kind === 'none') {
@@ -569,11 +593,16 @@
                 </div>
               </div>
             );
-          } else if (kind === 'moon') {
+          } else if (kind === 'moon' || kind === 'wolfbite') {
             // 月亮升起：第 1 張彎月、第 2 張半月、第 3 張全月（天空一開始是黑的，月亮升起後才轉紅，狼月降臨）
+            // wolfbite：第 3 張月亮之後，有人用拿一還一／守夜人把狼人留在手上 ➔ 直接是紅月，接著只播「咬向鏡頭」
+            const bite = kind === 'wolfbite';
             const ph = fx.phase || 1;
             const red = ph >= 3;
             const held = red && fx.wolf === 'held';
+            const tRed = bite ? 0 : 2.3;      // 月亮與天空轉紅的開始時間
+            const tGlow = bite ? 0.1 : 2.6;   // 紅光脈動
+            const tB = bite ? 1.3 : 3.7;      // 黑幕蓋上、咬鏡頭演出開始
             const mnames = ['孤狼月亮', '嘯狼月亮', '狼人月亮'];
             const moonSvg = (isRed, gid) => (
               <svg width="92" height="92" viewBox="0 0 100 100" style={{ filter: isRed ? 'drop-shadow(0 0 18px rgba(248,113,113,.9))' : 'drop-shadow(0 0 14px rgba(253,230,138,.7))' }}>
@@ -606,80 +635,53 @@
                 {teeth.map(([x, w, h], i) => <polygon key={i} points={`${x},24 ${x + w},24 ${x + w / 2},${24 + h}`} fill="#f5f5f4" stroke="#a8a29e" strokeWidth=".4" />)}
               </svg>
             );
-            const clawsA = ['M 8 -5 Q 40 40 62 108', 'M 22 -8 Q 54 36 76 106', 'M 36 -10 Q 66 34 90 104'];
-            const clawsB = ['M 92 -5 Q 60 40 38 108', 'M 78 -8 Q 46 36 24 106', 'M 64 -10 Q 34 34 10 104'];
-            const clawSet = (paths, t0) => paths.map((d, i) => (
-              <React.Fragment key={t0 + '-' + i}>
-                <path d={d} pathLength="100" fill="none" stroke="#ef4444" strokeWidth="9" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".5" style={{ strokeDasharray: 100, strokeDashoffset: 100, animation: `fxDraw .22s ease-out ${t0 + i * 0.07}s both` }} />
-                <path d={d} pathLength="100" fill="none" stroke="#fecaca" strokeWidth="4" strokeLinecap="round" vectorEffect="non-scaling-stroke" style={{ strokeDasharray: 100, strokeDashoffset: 100, animation: `fxDraw .22s ease-out ${t0 + i * 0.07}s both` }} />
-              </React.Fragment>
-            ));
             const wp = fx.wolfWinner, tp = fx.traitorWinner;
             body = (<>
               <div className="relative w-[270px] h-[300px] rounded-xl overflow-hidden border border-indigo-400/30" style={{ background: red ? 'linear-gradient(#000,#04050b 70%,#0a0b14)' : 'linear-gradient(#050816,#12183a 70%,#1e2350)' }}>
                 {[[12, 10], [30, 28], [55, 8], [78, 22], [90, 12], [18, 48], [85, 50], [45, 36], [68, 40]].map(([x, y], i) => (
                   <span key={i} className="absolute w-[2px] h-[2px] rounded-full bg-white" style={{ left: `${x}%`, top: `${y}%`, ...an('fxFadeUp', 0.6, 0.2 + i * 0.15) }}></span>
                 ))}
-                {red && <div className="absolute inset-0" style={{ background: 'linear-gradient(#1a0508,#4a0d14 70%,#2a0a0e)', animation: 'fxIn 1.2s ease 2.3s both' }}></div>}
-                {red && <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 55%, rgba(239,68,68,.35), transparent 65%)', animation: 'fxIn .8s ease 2.6s both, fxRedPulse 1.2s ease-in-out 3.4s infinite alternate' }}></div>}
-                <div className="absolute left-1/2 -ml-[46px] bottom-[70px]" style={an('fxMoonRise', 2.2, 0.2, 'cubic-bezier(.2,.8,.3,1)')}>
+                {red && <div className="absolute inset-0" style={{ background: 'linear-gradient(#1a0508,#4a0d14 70%,#2a0a0e)', animation: `fxIn ${bite ? 0.3 : 1.2}s ease ${tRed}s both` }}></div>}
+                {red && <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 55%, rgba(239,68,68,.35), transparent 65%)', animation: `fxIn ${bite ? 0.3 : 0.8}s ease ${tGlow}s both, fxRedPulse 1.2s ease-in-out ${tGlow + 0.8}s infinite alternate` }}></div>}
+                <div className="absolute left-1/2 -ml-[46px] bottom-[70px]" style={bite ? an('fxIn', 0.3, 0) : an('fxMoonRise', 2.2, 0.2, 'cubic-bezier(.2,.8,.3,1)')}>
                   <div className="relative w-[92px] h-[92px]">
                     {moonSvg(false, 'a')}
-                    {red && <div className="absolute inset-0" style={{ animation: 'fxIn .9s ease 2.3s both' }}>{moonSvg(true, 'b')}</div>}
+                    {red && <div className="absolute inset-0" style={{ animation: `fxIn ${bite ? 0.3 : 0.9}s ease ${tRed}s both` }}>{moonSvg(true, 'b')}</div>}
                   </div>
                 </div>
                 <svg className="absolute bottom-0 left-0 w-full h-[84px]" viewBox="0 0 270 84" preserveAspectRatio="none">
                   <path d="M0 40 Q40 14 80 36 T150 30 T220 38 T270 24 L270 84 L0 84 Z" fill="#05060f" />
                   <path d="M0 62 Q60 44 120 58 T270 52 L270 84 L0 84 Z" fill="#02030a" />
                 </svg>
-                {red && (held
-                  ? <span className="absolute left-1/2 -ml-[22px] bottom-[84px] text-[44px] leading-none" style={{ filter: 'brightness(0)', ...an('fxPop', 0.5, 3.1) }}>🐺</span>
-                  : <span className="absolute left-1/2 -ml-[22px] bottom-[84px] w-[44px] h-[44px] flex items-center justify-center" style={an('fxPop', 0.5, 3.1)}>
-                      <span className="text-[44px] leading-none opacity-25" style={{ filter: 'brightness(0)' }}>🐺</span>
-                      <i className="fa-solid fa-ban absolute text-slate-300 text-3xl"></i>
-                    </span>)}
+                {red && !held && (
+                  <span className="absolute left-1/2 -ml-[22px] bottom-[84px] w-[44px] h-[44px] flex items-center justify-center" style={an('fxPop', 0.5, 3.1)}>
+                    <span className="text-[44px] leading-none opacity-25" style={{ filter: 'brightness(0)' }}>🐺</span>
+                    <i className="fa-solid fa-ban absolute text-slate-300 text-3xl"></i>
+                  </span>
+                )}
                 <div className="absolute top-2 inset-x-0 text-center" style={an('fxFadeUp', 0.5, 0.1)}>
-                  <div className="text-[10px] text-slate-300 font-bold">{src ? src.name : ''} 翻開了</div>
+                  <div className="text-[10px] text-slate-300 font-bold">{src ? src.name : ''} {bite ? '手握【狼人】' : '翻開了'}</div>
                   <div className={`text-sm font-black tracking-widest ${red ? 'text-rose-300' : 'text-amber-200'}`}>{mnames[ph - 1] || card.title}</div>
                 </div>
-                <div className="absolute bottom-2 inset-x-0 flex flex-col items-center gap-0.5" style={an('fxPop', 0.4, red ? 3.0 : 1.4)}>
+                <div className="absolute bottom-2 inset-x-0 flex flex-col items-center gap-0.5" style={an('fxPop', 0.4, bite ? 0.4 : (red ? 3.0 : 1.4))}>
                   <div className="flex gap-1.5">{[1, 2, 3].map(i => <i key={i} className={`fa-solid fa-moon text-sm ${i <= ph ? (red ? 'text-rose-300' : 'text-amber-300') : 'text-slate-600'}`}></i>)}</div>
                   <div className={`text-[10px] font-black ${red ? 'text-rose-200' : 'text-slate-200'}`}>月亮 {ph}/3{red ? (fx.wolf === 'held' ? '・狼月降臨' : (fx.wolf === 'out' ? '・狼人已被淘汰，無人掌控狼月' : '・無人手握狼人')) : ''}</div>
                 </div>
               </div>
               {held && (
-                <div className="absolute inset-0 z-40 rounded-lg overflow-hidden bg-black pointer-events-none" style={{ animation: 'fxIn .5s linear 3.7s both' }}>
-                  <div className="absolute inset-0" style={{ animation: 'fxShake .4s linear 4.5s both, fxShake .4s linear 5.0s both, fxShake .45s linear 7.7s both' }}>
-                    {/* 第一幕：利爪抓過鏡頭（兩次） */}
-                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ filter: 'drop-shadow(0 0 6px #ef4444)', animation: 'fxClawFade .6s ease 5.8s both' }}>
-                      {clawSet(clawsA, 4.4)}
-                      {clawSet(clawsB, 4.95)}
-                    </svg>
-                    <div className="absolute inset-0 bg-white" style={{ animation: 'fxFlashW .25s ease-out 4.45s both' }}></div>
-                    <div className="absolute inset-0 bg-white" style={{ animation: 'fxFlashW .25s ease-out 5.0s both' }}></div>
-                    {/* 第二幕：黑暗中亮起紅眼，慢慢逼近 */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="flex gap-5" style={{ animation: 'fxEyeApproach 1.9s ease-in 5.7s both, fxOut .1s linear 7.6s forwards' }}>
-                        {[14, -14].map((rot, i) => (
-                          <div key={i} style={{ transform: `rotate(${rot}deg)` }}>
-                            <div className="relative w-[34px] h-[16px] rounded-[100%] overflow-hidden" style={{ background: 'radial-gradient(circle, #fecaca 0%, #ef4444 45%, #7f1d1d 100%)', boxShadow: '0 0 14px 4px rgba(239,68,68,.85)', animation: 'fxBlink .25s ease 6.6s both' }}>
-                              <span className="absolute left-1/2 top-0 w-[4px] h-full -ml-[2px] bg-black rounded"></span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                <div className="absolute inset-0 z-40 rounded-lg overflow-hidden bg-black pointer-events-none" style={{ animation: `fxIn .5s linear ${tB}s both` }}>
+                  <div className="absolute inset-0" style={{ animation: `fxShake .45s linear ${tB + 1.5}s both` }}>
+                    {/* 一口咬向鏡頭 */}
+                    <div className="absolute inset-0" style={{ animation: `fxOut .5s linear ${tB + 2.0}s forwards` }}>
+                      <div className="absolute inset-x-0 top-0 h-[58%]" style={{ animation: `fxJawOpenT .5s ease-out ${tB + 0.8}s both, fxJawSlamT .16s cubic-bezier(.6,0,1,.6) ${tB + 1.35}s forwards` }}>{jawSvg(false)}</div>
+                      <div className="absolute inset-x-0 bottom-0 h-[58%]" style={{ animation: `fxJawOpenB .5s ease-out ${tB + 0.8}s both, fxJawSlamB .16s cubic-bezier(.6,0,1,.6) ${tB + 1.35}s forwards` }}>{jawSvg(true)}</div>
                     </div>
-                    {/* 第三幕：一口咬向鏡頭 */}
-                    <div className="absolute inset-0" style={{ animation: 'fxOut .5s linear 8.2s forwards' }}>
-                      <div className="absolute inset-x-0 top-0 h-[58%]" style={{ animation: 'fxJawOpenT .5s ease-out 7.0s both, fxJawSlamT .16s cubic-bezier(.6,0,1,.6) 7.55s forwards' }}>{jawSvg(false)}</div>
-                      <div className="absolute inset-x-0 bottom-0 h-[58%]" style={{ animation: 'fxJawOpenB .5s ease-out 7.0s both, fxJawSlamB .16s cubic-bezier(.6,0,1,.6) 7.55s forwards' }}>{jawSvg(true)}</div>
-                    </div>
-                    <div className="absolute inset-0 bg-white" style={{ animation: 'fxFlashW .2s ease-out 7.7s both' }}></div>
-                    <div className="absolute inset-0 bg-red-700" style={{ animation: 'fxFlood .9s ease-out 7.7s both' }}></div>
+                    <div className="absolute inset-0 bg-white" style={{ animation: `fxFlashW .2s ease-out ${tB + 1.5}s both` }}></div>
+                    <div className="absolute inset-0 bg-red-700" style={{ animation: `fxFlood .9s ease-out ${tB + 1.5}s both` }}></div>
                   </div>
-                  <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(127,29,29,.55), #000 75%)', animation: 'fxIn .6s ease 8.3s both' }}></div>
+                  <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(127,29,29,.55), #000 75%)', animation: `fxIn .6s ease ${tB + 2.1}s both` }}></div>
                   {/* 結尾：標出獲勝者 */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2" style={an('fxPop', 0.5, 8.5)}>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2" style={an('fxPop', 0.5, tB + 2.3)}>
                     <div className="text-lg font-black tracking-[0.3em] text-rose-300" style={{ textShadow: '0 0 14px rgba(239,68,68,.9)' }}>狼月降臨</div>
                     {wp && <FxChip p={wp} size="w-14 h-14 text-2xl" glow="ring-4 ring-rose-500/80" />}
                     <div className="text-sm font-black text-rose-200">🐺 {wp ? wp.name : '狼人'} 獲勝</div>
@@ -958,6 +960,7 @@
             } else if (kind === 'selfout') {
               stampAt = 0.9;
             }
+            revealAt = stampAt + 0.7;
             const srcWrap = (
               <div className="relative" style={an('fxInL', 0.4, 0)}>
                 <div style={stampSrc && fx.stampText ? an('fxShake', 0.5, stampAt + 0.2) : undefined}><FxChip p={src} /></div>
@@ -998,13 +1001,26 @@
             );
           }
 
+          const reveals = (fx.reveals || []).filter(r => r && r.p);
+          const showReveals = reveals.length > 0 && kind !== 'compare' && !(kind === 'bounty' && fx.revealed);
           return (
             <div
+              ref={rootRef}
               className={`${replay ? 'fx-hold' : ''} absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
               style={replay ? undefined : (fx.sticky ? { animation: 'fxIn .25s linear both' } : { animation: `fxIn .25s linear both, fxOut .3s linear ${Math.max(0, fx.duration + (fx.hold !== undefined ? fx.hold : fxHold(fx)) - 300) / 1000}s forwards` })}
-              onClick={isNone ? undefined : onSkip}
+              onClick={isNone ? undefined : handleClick}
             >
               <div ref={bodyRef} className="contents">{body}</div>
+              {showReveals && (
+                <div className="absolute inset-x-0 bottom-7 z-40 flex flex-wrap items-end justify-center gap-x-2.5 gap-y-1 px-2 pointer-events-none" style={an('fxPop', 0.4, revealAt)}>
+                  {reveals.map(r => (
+                    <div key={r.p.id} className="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/50 bg-slate-950/85 px-1.5 py-1">
+                      <span className="text-[9px] font-black leading-tight text-fuchsia-300 whitespace-nowrap">{r.p.name}<br />公開手牌</span>
+                      {r.cards && r.cards.length ? r.cards.map((c, ci) => <FxFace key={ci} c={c} cls="w-11 h-[58px]" />) : <span className="text-[9px] text-slate-400">無</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
               {replay && <span className="absolute top-1 left-2 z-50 text-[9px] font-black text-amber-300 bg-slate-900/80 border border-amber-500/40 rounded-full px-2 py-0.5 pointer-events-none">回放</span>}
               {!isNone && (replay
                 ? <span className="absolute bottom-1 right-2 z-50 text-[8px] text-slate-500 pointer-events-none">點一下離開</span>
@@ -1050,6 +1066,7 @@
             '6 人局（你 + 5 位 AI），先累計 2 局勝利者贏得整場。',
             '每回合手上只有 1 張牌：先「抽一打一」或「拿一還一」，再把 1 張手牌拖曳到中央戰場打出。',
             '唯一存活者獲勝；第 3 張月亮翻開時手握狼人者獲勝；牌庫耗盡則比手牌數值。',
+            '第 3 張月亮翻開後，若有人用「拿一還一」放回牌、或守夜人保留牌之後手上握著狼人，立刻獲勝。',
           ]},
           { title: '回合行動', items: [
             '抽一打一：從牌庫頂抽 1 張，再打出 1 張。',
@@ -1057,7 +1074,7 @@
             '抽到月亮牌會先展示並使月亮計數 +1，不給額外回合，翻開者繼續抽牌。',
           ]},
           { title: '勝負結算', items: [
-            '狼人月亮（第 3 張）：手握狼人者獲勝，手握叛徒者連帶獲勝。',
+            '狼人月亮（第 3 張）：手握狼人者獲勝，手握叛徒者連帶獲勝；第 3 張月亮之後從中央暗牌拿到狼人並留在手上（拿一還一、守夜人）同樣獲勝。',
             '牌庫耗盡：先檢查乞丐之王；否則比最終數值（商人 +2、科學怪人特殊計算），最高者獲勝，平手共同獲勝。',
             '市長、狼人打出放在自己面前會立刻出局。',
             '女巫復活的玩家若獲勝，女巫持有者共同獲勝。',
@@ -1067,7 +1084,7 @@
           { v: 0, name: '刺客', d: '指定玩家猜 0–10 的數值，有 2 次機會（同一目標、數值不同），猜中出局。' },
           { v: 0, name: '乞丐之王', d: '牌庫耗盡時手握此牌，且有玩家手牌為 8 或 9，獨享勝利。' },
           { v: 1, name: '村民 ×4', d: '指定玩家猜 0–10 的數值，猜中出局（1 次）。' },
-          { v: 1, name: '醉漢', d: '所有存活且未受保護的玩家手牌洗勻後各發 1 張。' },
+          { v: 1, name: '醉漢', d: '先秘密檢視所有存活且未受保護玩家的手牌，再洗勻後各發 1 張。' },
           { v: 1, name: '僕人', d: '回合結束時可棄掉面前的僕人，立刻進行額外回合。' },
           { v: 2, name: '先知', d: '秘密檢視一位對手的手牌。' },
           { v: 2, name: '稅務官', d: '指定玩家，手牌為 0 或 1 則出局。' },
@@ -1096,7 +1113,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.12 M');
+          const [version] = useState('v0.0.13 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -1328,6 +1345,7 @@
             metaApplySwap(slot, pid, ret);
             const name = st.players.find(p => p.id === pid).name;
             logActionAndResult(`${name} 執行【拿一還一】`, `替換了 1 張中央暗牌（暗牌 ${slot + 1}）➔ 中央暗牌維持 3 張`, name);
+            if (wolfWinAfterSwap(pid, [keep])) return true; // 第 3 張月亮後把狼人留在手上 ➔ 立刻獲勝
             advanceTurn();
             return true;
           };
@@ -1479,6 +1497,15 @@
               // 手牌被間諜接手（不公開）：只亮紅燈，不列公開手牌
               setHistoryLogs(prev => prev.length ? [{ ...prev[0], event: 'out' }, ...prev.slice(1)] : prev);
             } else {
+              // 淘汰動畫也要顯示該玩家公開展示的手牌（只附在與此人有關的那筆動畫上；比大小動畫本來就會翻開輸家的牌）
+              const metaOf = (t) => [...BASE_CARDS_DEF, WEREWOLF_CARD].find(m => m.title === t);
+              const revealEntry = { p: target, cards: targetHand.map(c => ({ title: c.title, value: c.value, icon: c.icon || (metaOf(c.title) || {}).icon })) };
+              const attachReveal = (f) => (f && f.kind !== 'compare' && f.kind !== 'moon' && f.kind !== 'wolfbite' && f.kind !== 'score' && f.kind !== 'place' && f.kind !== 'servant' && f.kind !== 'takeone'
+                && ((f.tgt && f.tgt.id === targetId) || (f.src && f.src.id === targetId))
+                && !(f.reveals || []).some(r => r.p.id === targetId))
+                ? { ...f, reveals: [...(f.reveals || []), revealEntry] } : f;
+              setFx(prev => attachReveal(prev));
+              setHistoryLogs(prev => prev.length ? [{ ...prev[0], fx: attachReveal(prev[0].fx) }, ...prev.slice(1)] : prev);
               const handText = targetHand.length ? targetHand.map(c => `(${c.value})【${c.title}】`).join('、') : '無';
               const revealText = `${target.name} 公開手牌：${handText}`;
               setBroadcastReveal(prev => prev && prev.includes(revealText) ? prev : (prev ? `${prev}｜${revealText}` : revealText));
@@ -1620,6 +1647,26 @@
               winners.push(traitorWinner);
               reasonText += `叛徒【${traitorWinner.name}】共同獲勝！`;
             }
+            triggerVictory(winners, reasonText);
+            return true;
+          };
+
+          // 第 3 張月亮翻開後，玩家（或 AI）用「拿一還一」放回牌、或守夜人保留牌之後，手上握著狼人 ➔ 立即獲勝（叛徒連帶）並播咬鏡頭動畫。
+          // handCards＝此刻該玩家的手牌（直接傳入，避免讀到尚未更新的狀態）。回傳是否已結束遊戲
+          const wolfWinAfterSwap = (pid, handCards) => {
+            const st = stateRef.current;
+            if (gameOverRef.current || st.moonPhase < 3) return false;
+            const holder = st.players.find(p => p.id === pid);
+            if (!holder || holder.status !== '存活') return false;
+            if (!(handCards || []).some(c => c && c.type === 'WEREWOLF')) return false;
+            let traitorWinner = null;
+            st.players.filter(p => p.status === '存活' && p.id !== pid).forEach(p => {
+              if ((st.playerHands[p.id] || []).some(c => c && c.title === '叛徒')) traitorWinner = p;
+            });
+            logActionAndResult(`${holder.name} 手握【狼人】`, '第 3 張月亮已翻開 ➔ 狼月降臨', holder.name);
+            const winners = [holder];
+            let reasonText = '狼月降臨勝利：第3張月亮已翻開，手握狼人者掌控夜晚！';
+            if (traitorWinner) { winners.push(traitorWinner); reasonText += `叛徒【${traitorWinner.name}】共同獲勝！`; }
             triggerVictory(winners, reasonText);
             return true;
           };
@@ -1882,6 +1929,7 @@
               logActionAndResult('你 執行【拿一還一】', `${taken ? `從暗牌 ${idx + 1} 拿到(${taken.value})【${taken.title}】，` : ''}放回(${cardToReturn.value})【${cardToReturn.title}】 ➔ 中央暗牌維持 3 張`, '你');
               takenCardRef.current = null;
               takenSlotRef.current = null;
+              if (wolfWinAfterSwap(0, remainingHand)) return; // 放回之後手上握著狼人（第 3 張月亮後）➔ 立刻獲勝
               advanceTurn();
               return;
             }
@@ -1898,6 +1946,29 @@
             setPlayedCardArena({ ...card, playedBy: player.name });
             // 延後結算，確保讀到已更新的手牌與面前牌
             setTimeout(() => { if (!gameOverRef.current && resolveRef.current) resolveRef.current(playerId, card); }, 500 * slow());
+          };
+
+          // 醉漢：所有存活且未受保護的玩家（含自己）手牌收集洗勻後各發 1 張
+          const doDrunkDeal = (sourceId) => {
+            const stNow = stateRef.current;
+            const source = stNow.players.find(p => p.id === sourceId);
+            if (!source) { advanceTurn(); return; }
+            const participants = stNow.players.filter(p => p.status === '存活' && (p.id === sourceId || !p.protected));
+            const skipped = stNow.players.filter(p => p.status === '存活' && p.id !== sourceId && p.protected);
+            const oldHands = stNow.playerHands; // 先記下洗牌前的手牌（之後 stateRef 會被改掉，不能再從 stNow 讀）
+            let pool = [];
+            participants.forEach(p => { pool.push(...(oldHands[p.id] || []).filter(Boolean)); });
+            pool = shuffle(pool);
+            const dealt = {};
+            participants.forEach(p => { dealt[p.id] = pool.length ? [pool.pop()] : []; });
+            stateRef.current.playerHands = { ...oldHands, ...dealt };
+            setPlayerHands(prev => ({ ...prev, ...dealt }));
+            logActionAndResult(
+              `${source.name} 打出了(1)【醉漢】重洗手牌`,
+              (skipped.length ? `全員手牌已重發（${skipped.map(p => p.name).join('、')} 受保護未參與）` : '全員手牌已重發') + (dealt[0] ? gotCardsText(dealt[0], oldHands[0]) : ''),
+              source.name
+            );
+            advanceTurn();
           };
 
           const resolveCardEffect = (sourceId, card) => {
@@ -1933,22 +2004,16 @@
                 break;
 
               case 'DRUNKARD': {
-                const stNow = stateRef.current;
-                const participants = stNow.players.filter(p => p.status === '存活' && (p.id === sourceId || !p.protected));
-                const skipped = stNow.players.filter(p => p.status === '存活' && p.id !== sourceId && p.protected);
-                let pool = [];
-                participants.forEach(p => { pool.push(...(stNow.playerHands[p.id] || []).filter(Boolean)); });
-                pool = shuffle(pool);
-                const dealt = {};
-                participants.forEach(p => { dealt[p.id] = pool.length ? [pool.pop()] : []; });
-                stateRef.current.playerHands = { ...stNow.playerHands, ...dealt };
-                setPlayerHands(prev => ({ ...prev, ...dealt }));
-                logActionAndResult(
-                  `${source.name} 打出了(1)【醉漢】重洗手牌`,
-                  (skipped.length ? `全員手牌已重發（${skipped.map(p => p.name).join('、')} 受保護未參與）` : '全員手牌已重發') + (dealt[0] ? gotCardsText(dealt[0], stNow.playerHands[0]) : ''),
-                  source.name
-                );
-                advanceTurn();
+                // 玩家自己打出醉漢：先秘密檢視所有參與者的手牌，按下「洗牌重發」才洗牌發牌
+                if (sourceId === 0) {
+                  const stV = stateRef.current;
+                  const partsV = stV.players.filter(p => p.status === '存活' && (p.id === 0 || !p.protected));
+                  const skippedV = stV.players.filter(p => p.status === '存活' && p.id !== 0 && p.protected);
+                  const viewV = partsV.map(p => ({ p, card: ((stV.playerHands[p.id] || []).filter(Boolean))[0] || null }));
+                  setInteractionModal({ type: 'DRUNK_VIEW', title: '醉漢：秘密檢視所有手牌', view: viewV, skipped: skippedV });
+                  break;
+                }
+                doDrunkDeal(sourceId);
                 break;
               }
 
@@ -1996,11 +2061,15 @@
               const center = [...centerCards];
               const aiHand = playerHands[sourceId] || [];
               const combined = [...center, ...aiHand];
-              const keepCard = combined.pop();
-              setCenterCards(shuffle(combined));
+              // 第 3 張月亮翻開後，若看到狼人就留下它（留在手上即獲勝）；否則維持原本：留下自己的手牌
+              const wolfPick = stateRef.current.moonPhase >= 3 ? combined.find(c => c && c.type === 'WEREWOLF') : null;
+              const keepCard = wolfPick || combined[combined.length - 1];
+              const restCards = combined.filter(c => c !== keepCard);
+              setCenterCards(shuffle(restCards));
               metaWatchman(sourceId, null, '');
               setPlayerHands(prev => ({ ...prev, [sourceId]: [keepCard] }));
               logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【守夜人】`, '檢視中央暗牌 ➔ 重新洗牌歸位', sourcePlayer.name);
+              if (wolfWinAfterSwap(sourceId, [keepCard])) return;
               advanceTurn();
               return;
             }
@@ -2210,6 +2279,8 @@
 
             if (type === 'SERVANT_CHOICE') {
               useServant(0, payload.servantId);
+            } else if (type === 'DRUNK_VIEW') {
+              doDrunkDeal(0);
             } else if (type === 'VILLAGER' || type === 'ASSASSIN') {
               executeGuess(0, targetId, parseInt(guessedValue), type === 'ASSASSIN', false, type === 'ASSASSIN' ? parseInt(guessedValue2) : null);
             } else if (type === 'NIGHT_WATCHMAN') {
@@ -2226,6 +2297,7 @@
               metaWatchman(0, shuffledCenter, watchNoteText);
               setPlayerHands(prev => ({ ...prev, 0: [keptCard] }));
               logActionAndResult('你 打出了(3)【守夜人】', '檢視並調整中央暗牌 ➔ 成功保留 1 張卡牌', '你');
+              if (wolfWinAfterSwap(0, [keptCard])) return; // 保留的是狼人（第 3 張月亮後）➔ 立刻獲勝
               advanceTurn();
             } else if (type === 'GRAVEDIGGER') {
               const targetP = players.find(p => p.id === targetId);
@@ -2900,6 +2972,7 @@
                       return;
                     }
                     if (interactionModal.type === 'SERVANT_CHOICE') { setInteractionModal(null); proceedToNext(); return; }
+                    if (interactionModal.type === 'DRUNK_VIEW') { setInteractionModal(null); doDrunkDeal(0); return; } // 已看過手牌，不能取消
                     if (interactionModal.type === 'INFO') { setInteractionModal(null); advanceTurn(); return; }
                     const playedCard = interactionModal.card;
                     lockRef.current = false;
@@ -3344,6 +3417,22 @@
                     )}
                     {modal.message && <p className="text-xs text-slate-300 mb-4 whitespace-pre-line">{modal.message}</p>}
                     <button onClick={onCancel} className="w-full bg-emerald-600 text-white text-xs py-2 rounded-xl font-bold">確定</button>
+                  </div>
+                ) : modal.type === 'DRUNK_VIEW' ? (
+                  <div>
+                    <p className="text-[11px] text-slate-300 mb-3">你拿走了所有玩家的手牌並秘密檢視（只有你看得到）。按下按鈕後，這些牌會面朝下洗勻，再隨機發給每位玩家 1 張。</p>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {(modal.view || []).map(v => (
+                        <div key={v.p.id} className="flex flex-col items-center gap-1 rounded-lg border border-slate-700/70 bg-slate-800/60 py-1.5">
+                          <FxChip p={v.p} size="w-9 h-9 text-base" />
+                          {v.card ? <FxFace c={v.card} cls="w-12 h-[64px]" /> : <span className="text-[10px] text-slate-500 h-[64px] flex items-center">無手牌</span>}
+                        </div>
+                      ))}
+                    </div>
+                    {modal.skipped && modal.skipped.length > 0 && (
+                      <div className="text-[10px] font-bold text-cyan-300 mb-3"><i className="fa-solid fa-shield-halved mr-1"></i>{modal.skipped.map(p => p.name).join('、')} 受保護未參與</div>
+                    )}
+                    <button onClick={() => onSubmit({ type: 'DRUNK_VIEW' })} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-xl font-bold"><i className="fa-solid fa-shuffle mr-1"></i>洗牌重發</button>
                   </div>
                 ) : modal.type === 'SERVANT_CHOICE' ? (
                   <div>
