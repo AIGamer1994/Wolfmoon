@@ -656,7 +656,7 @@
                 setMoonPhase(phase);
                 stateRef.current.moonPhase = phase;
                 setPlayedCardArena(moonArenaCard(drawn, drawer.name, phase));
-                logActionAndResult(`${drawer.name} 翻開【${drawn.title}】`, `月亮 ${phase}/3`, drawer.name);
+                logActionAndResult(`${drawer.name} 翻開【${drawn.title}】`, `月亮牌 ${phase}/3`, drawer.name);
 
                 if (phase >= 3) {
                   let werewolfWinner = null;
