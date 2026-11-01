@@ -102,17 +102,17 @@
           { title: '先知', desc: '秘密檢視一位對手的手牌。', value: 2, icon: 'fa-eye', category: '數值 2', totalCount: 1, type: 'SEER' },
           { title: '稅務官', desc: '指定一位玩家，若其手牌為 0 或 1，該玩家出局。', value: 2, icon: 'fa-coins', category: '數值 2', totalCount: 1, type: 'TAX_COLLECTOR' },
           { title: '審判官', desc: '指定一位玩家，若其手牌為 9 或 10，該玩家出局。', value: 2, icon: 'fa-gavel', category: '數值 2', totalCount: 1, type: 'INQUISITOR' },
-          { title: '吸血鬼', desc: '打出時，若您面前已有至少 2 張數值 7 以上的牌，立刻獲勝。', value: 2, icon: 'fa-bat', category: '數值 2', totalCount: 1, type: 'VAMPIRE' },
+          { title: '吸血鬼', desc: '打出時，若您面前已有至少 2 張數值 7 以上的牌，立刻獲勝。', value: 2, icon: 'fa-droplet', category: '數值 2', totalCount: 1, type: 'VAMPIRE' },
           { title: '酒保', desc: '秘密比較自己與一位對手的手牌數值；較小者出局。', value: 3, icon: 'fa-martini-glass', category: '數值 3', totalCount: 1, type: 'BARKEEPER' },
           { title: '小女孩', desc: '秘密比較自己與一位對手的手牌數值；較大者出局。', value: 3, icon: 'fa-child', category: '數值 3', totalCount: 1, type: 'GIRL' },
           { title: '商人', desc: '牌庫耗盡時，若您面前有商人，手牌結算數值 +2。', value: 3, icon: 'fa-store', category: '數值 3', totalCount: 1, type: 'PASSIVE' },
           { title: '守夜人', desc: '拿起中央3張牌，從4張中留1張，其餘3張放回中央。', value: 3, icon: 'fa-binoculars', category: '數值 3', totalCount: 1, type: 'NIGHT_WATCHMAN' },
           { title: '保鏢', desc: '直到您下個回合開始前不受其他玩家牌效影響。', value: 4, icon: 'fa-shield-halved', category: '數值 4', totalCount: 2, type: 'BODYGUARD' },
           { title: '女巫', desc: '指定一位出局玩家復活抽牌；若該玩家獲勝，您也共同獲勝。', value: 4, icon: 'fa-hat-wizard', category: '數值 4', totalCount: 1, type: 'WITCH' },
-          { title: '科學怪人', desc: '牌庫耗盡時，最終數值為面前最小與最大牌的總和。', value: 4, icon: 'fa-bolt', category: '數值 4', totalCount: 1, type: 'PASSIVE' },
+          { title: '科學怪人', desc: '牌庫耗盡時若手握此牌，最終數值為面前最小與最大牌的總和。', value: 4, icon: 'fa-bolt', category: '數值 4', totalCount: 1, type: 'PASSIVE' },
           { title: '叛徒', desc: '第3張月亮翻開且狼人獲勝時，若您手握叛徒，您也獲勝。', value: 5, icon: 'fa-mask', category: '數值 5', totalCount: 1, type: 'PASSIVE' },
           { title: '賞金獵人', desc: '指定玩家公開手牌並重抽；若重抽到市長或狼人，該玩家出局。', value: 5, icon: 'fa-crosshairs', category: '數值 5', totalCount: 1, type: 'BOUNTY_HUNTER' },
-          { title: '掘墓人', desc: '從一位玩家面前取一張非狼人牌加入手牌，再打出1張。', value: 6, icon: 'fa-shovel', category: '數值 6', totalCount: 1, type: 'GRAVEDIGGER' },
+          { title: '掘墓人', desc: '從一位玩家面前取一張非狼人牌加入手牌，再打出1張。', value: 6, icon: 'fa-skull', category: '數值 6', totalCount: 1, type: 'GRAVEDIGGER' },
           { title: '扒手', desc: '指定兩位對手，互換手牌。', value: 6, icon: 'fa-people-arrows-left-right', category: '數值 6', totalCount: 1, type: 'PICKPOCKET' },
           { title: '間諜', desc: '若他人猜測您的手牌失敗，可打出間諜使猜測者出局並接手其手牌。', value: 7, icon: 'fa-user-secret', category: '數值 7', totalCount: 1, type: 'SPY' },
           { title: '小偷', desc: '與一位對手交換手牌，然後立刻進行額外回合。', value: 7, icon: 'fa-mask', category: '數值 7', totalCount: 1, type: 'THIEF' },
@@ -129,11 +129,92 @@
           { title: '狼人月亮牌', isMoon: true, level: 3, desc: '第3張月亮牌。手握狼人者立刻獲勝！' },
         ];
 
+        // 廣播／紀錄文字轉換：數值 → emoji、卡牌名（不用【】）金黃粗體、「你」天藍粗體
+        const NUM_KEYCAPS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+        const numEmoji = (n) => {
+          const v = parseInt(n, 10);
+          if (v === 10) return '🔟';
+          return String(v).split('').map(d => NUM_KEYCAPS[parseInt(d, 10)]).join('');
+        };
+        const KNOWN_CARD_TITLES = new Set([...BASE_CARDS_DEF.map(c => c.title), '狼人', ...MOON_CARDS.map(m => m.title)]);
+        function RichLog({ text, nameClass = 'text-amber-300' }) {
+          if (text === undefined || text === null) return null;
+          const str = String(text);
+          const out = [];
+          const re = /\((\d+)\)【([^】]+)】|\((\d+)\)|【([^】]+)】|你/g;
+          let last = 0, m, k = 0;
+          while ((m = re.exec(str)) !== null) {
+            if (m.index > last) out.push(str.slice(last, m.index));
+            if (m[1] !== undefined) {
+              if (KNOWN_CARD_TITLES.has(m[2])) out.push(<span key={k++}>{numEmoji(m[1])}<b className={`font-black ml-0.5 ${nameClass}`}>{m[2]}</b></span>);
+              else out.push(m[0]);
+            } else if (m[3] !== undefined) {
+              out.push(numEmoji(m[3]));
+            } else if (m[4] !== undefined) {
+              if (KNOWN_CARD_TITLES.has(m[4])) out.push(<b key={k++} className={`font-black ${nameClass}`}>{m[4]}</b>);
+              else out.push(m[0]);
+            } else {
+              out.push(<b key={k++} className="font-black text-sky-300">你</b>);
+            }
+            last = re.lastIndex;
+          }
+          if (last < str.length) out.push(str.slice(last));
+          return <>{out}</>;
+        }
+
+        // 規則彈窗內容（簡要規則 + 角色技能）
+        const RULES_SECTIONS = [
+          { title: '遊戲目標', items: [
+            '6 人局（你 + 5 位 AI），先累計 2 局勝利者贏得整場。',
+            '每回合手上只有 1 張牌：先「抽一打一」或「拿一還一」，再把 1 張手牌拖曳到中央戰場打出。',
+            '唯一存活者獲勝；第 3 張月亮翻開時手握狼人者獲勝；牌庫耗盡則比手牌數值。',
+          ]},
+          { title: '回合行動', items: [
+            '抽一打一：從牌庫頂抽 1 張，再打出 1 張。',
+            '拿一還一：拿走 1 格中央暗牌，再把 1 張手牌放回同一格（手上只有 1 張時可用），放回後直接結束回合。',
+            '抽到月亮牌會先展示並使月亮計數 +1，不給額外回合，翻開者繼續抽牌。',
+          ]},
+          { title: '勝負結算', items: [
+            '狼人月亮（第 3 張）：手握狼人者獲勝，手握叛徒者連帶獲勝。',
+            '牌庫耗盡：先檢查乞丐之王；否則比最終數值（商人 +2、科學怪人特殊計算），最高者獲勝，平手共同獲勝。',
+            '市長、狼人打出放在自己面前會立刻出局。',
+            '女巫復活的玩家若獲勝，女巫持有者共同獲勝。',
+          ]},
+        ];
+        const RULES_CARDS = [
+          { v: 0, name: '刺客', d: '指定玩家猜 0–10 的數值，有 2 次機會（同一目標、數值不同），猜中出局。' },
+          { v: 0, name: '乞丐之王', d: '牌庫耗盡時手握此牌，且有玩家手牌為 8 或 9，獨享勝利。' },
+          { v: 1, name: '村民 ×4', d: '指定玩家猜 0–10 的數值，猜中出局（1 次）。' },
+          { v: 1, name: '醉漢', d: '所有存活且未受保護的玩家手牌洗勻後各發 1 張。' },
+          { v: 1, name: '僕人', d: '回合結束時可棄掉面前的僕人，立刻進行額外回合。' },
+          { v: 2, name: '先知', d: '秘密檢視一位對手的手牌。' },
+          { v: 2, name: '稅務官', d: '指定玩家，手牌為 0 或 1 則出局。' },
+          { v: 2, name: '審判官', d: '指定玩家，手牌為 9 或 10 則出局。' },
+          { v: 2, name: '吸血鬼', d: '打出時面前已有 2 張以上數值 7 以上的牌，立刻獲勝。' },
+          { v: 3, name: '酒保', d: '與一位對手秘密比大小，較小者出局，平手無事。' },
+          { v: 3, name: '小女孩', d: '與一位對手秘密比大小，較大者出局，平手無事。' },
+          { v: 3, name: '商人', d: '牌庫耗盡時，面前有商人則手牌數值 +2。' },
+          { v: 3, name: '守夜人', d: '拿起中央 3 張暗牌，從 4 張中留 1 張，其餘放回。' },
+          { v: 4, name: '保鏢 ×2', d: '直到你下個回合開始前，不受其他玩家牌效影響。' },
+          { v: 4, name: '女巫', d: '指定出局玩家從牌庫頂抽 1 張復活；該玩家獲勝則你共同獲勝。' },
+          { v: 4, name: '科學怪人', d: '牌庫耗盡時若手握此牌，最終數值 = 面前最小牌 + 最大牌。' },
+          { v: 5, name: '叛徒', d: '第 3 張月亮翻開且狼人獲勝時，手握叛徒者一同獲勝。' },
+          { v: 5, name: '賞金獵人', d: '指定玩家公開手牌並重抽；若以此打出市長或狼人則出局，打出吸血鬼且達成條件則獲勝。' },
+          { v: 6, name: '掘墓人', d: '從一位玩家面前取 1 張牌（狼人除外）加入手牌，再選 1 張打出。' },
+          { v: 6, name: '扒手', d: '指定兩位對手互換手牌。' },
+          { v: 7, name: '間諜', d: '他人用刺客／村民猜你失敗時，可打出間諜使其出局並接手其手牌。' },
+          { v: 7, name: '小偷', d: '與一位對手交換手牌，並立刻進行額外回合。' },
+          { v: 8, name: '陰謀家', d: '手握時被對手牌效淘汰，該對手一同出局（僅剩兩人同時出局則無人獲勝）。' },
+          { v: 8, name: '煉金術士', d: '被對手牌效淘汰時，可棄掉面前的煉金術士抽 1 張復活。' },
+          { v: 9, name: '市長', d: '放在自己面前立刻出局。' },
+          { v: 10, name: '狼人', d: '放在自己面前立刻出局；第 3 張月亮翻開時手握狼人者獲勝。' },
+        ];
+
         // 每一格中央暗牌的追蹤資料：誰看過、誰換過、玩家自己看過的內容（myStale = 之後有人動過）
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.6 M');
+          const [version] = useState('v0.0.11 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -151,6 +232,7 @@
           const [gameOver, setGameOver] = useState(false);
           const [winnerInfo, setWinnerInfo] = useState(null);
           const [wins, setWins] = useState({}); // 勝場月亮標記（跨局累計）
+          const [victoryDismissed, setVictoryDismissed] = useState(false); // 勝利視窗已關閉（返回牌桌查看全部牌）
 
           // 牌庫、備用牌、手牌、中央牌
           const [deck, setDeck] = useState([]);
@@ -165,10 +247,13 @@
 
           // 彈窗與互動介面狀態
           const [isDeckModalOpen, setIsDeckModalOpen] = useState(false);
+          const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
           const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
           const [isCenterCardsModalOpen, setIsCenterCardsModalOpen] = useState(false);
           const [centerMeta, setCenterMeta] = useState(() => [0, 1, 2].map(makeCenterMeta));
-          const [centerKnownSet, setCenterKnownSet] = useState(null); // 玩家用守夜人看過、但順序未知的暗牌
+          const [centerKnownSet, setCenterKnownSet] = useState(null); // （保留，不再使用）
+          const [watchLog, setWatchLog] = useState([]);   // 守夜人使用紀錄（公開：誰看過3張、換過1張）
+          const [watchNote, setWatchNote] = useState(null); // 玩家本人用守夜人的私人備註 { text, stale }
           const [centerPickMode, setCenterPickMode] = useState(false);
           const [pickSlot, setPickSlot] = useState(null);
 
@@ -225,18 +310,20 @@
               myCard: pid === 0 ? placed : m.myCard,
               myStale: pid === 0 ? false : (m.myCard ? true : m.myStale),
             }));
-            if (pid !== 0) setCenterKnownSet(null);
+            if (pid !== 0) { setCenterKnownSet(null); setWatchNote(prev => prev ? { ...prev, stale: true } : prev); }
           };
 
-          // 暗牌追蹤：守夜人看過並洗勻三格（三格都算看過、換過）
-          const metaWatchman = (pid, knownCards) => {
-            setCenterMeta(prev => prev.map(m => ({
-              viewedBy: m.viewedBy.includes(pid) ? m.viewedBy : [...m.viewedBy, pid],
-              swappedBy: m.swappedBy.includes(pid) ? m.swappedBy : [...m.swappedBy, pid],
-              myCard: pid === 0 ? null : m.myCard,
+          // 暗牌追蹤：守夜人看過 3 張、換過 1 張並洗勻（公開只知「看過3、換過1、不知哪一格」）
+          // 玩家本人用守夜人時，會知道洗勻後每一格是什麼牌（shuffled），並留下換出／換入的私人備註
+          const metaWatchman = (pid, shuffled, note) => {
+            setCenterMeta(prev => prev.map((m, i) => ({
+              ...m,
+              myCard: pid === 0 ? ((shuffled || [])[i] || null) : m.myCard,
               myStale: pid === 0 ? false : (m.myCard ? true : m.myStale),
             })));
-            setCenterKnownSet(pid === 0 ? knownCards : null);
+            setWatchLog(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, pid }]);
+            setWatchNote(pid === 0 ? { text: note || '', stale: false } : (prev => prev ? { ...prev, stale: true } : prev));
+            setCenterKnownSet(null);
           };
 
           // AI 的「拿一還一」：隨機拿一格暗牌；優先放回市長，其次放回數值較小的非狼人牌；之後結束回合
@@ -265,9 +352,12 @@
           };
 
           // 玩家（人類）換到新手牌時，列出取得的牌（僅限自己；AI 取得的牌不公開）
-          const gotCardsText = (hand) => {
+          const gotCardsText = (hand, oldHand) => {
+            const fmt = (arr) => arr.map(c => `(${c.value})【${c.title}】`).join('、');
             const cs = (hand || []).filter(Boolean);
-            return cs.length ? `｜你 取得 ${cs.map(c => `(${c.value})【${c.title}】`).join('、')}` : '';
+            const os = (oldHand || []).filter(Boolean);
+            if (!cs.length) return os.length ? `｜你 換出 ${fmt(os)}` : '';
+            return os.length ? `｜你 換出 ${fmt(os)}、取得 ${fmt(cs)}` : `｜你 取得 ${fmt(cs)}`;
           };
 
           // 按照規則初始化準備遊戲（三層牌庫結構）
@@ -314,6 +404,9 @@
             setCenterCards(center);
             setCenterMeta([0, 1, 2].map(makeCenterMeta));
             setCenterKnownSet(null);
+            setWatchLog([]);
+            setWatchNote(null);
+            setVictoryDismissed(false);
             setCenterPickMode(false);
             setPickSlot(null);
             takenCardRef.current = null;
@@ -434,12 +527,17 @@
           const resolveDeckEmptyVictory = (alivePlayers) => {
             if (gameOverRef.current) return;
             const hands = stateRef.current.playerHands;
+            const fmtCard = (c) => c ? `(${c.value})【${c.title}】` : '';
             for (let p of alivePlayers) {
               const hand = hands[p.id] || [];
               if (hand.some(c => c && c.title === '乞丐之王')) {
                 const has8or9 = alivePlayers.some(other => (hands[other.id] || []).some(c => c && (c.value === 8 || c.value === 9)));
                 if (has8or9) {
-                  triggerVictory(p, '乞丐之王勝利：發動絕密乞丐之王，獨享勝利！', true);
+                  const handRows = alivePlayers.map(q => {
+                    const c = (hands[q.id] || [])[0];
+                    return { id: q.id, name: q.name, text: `${q.name} 手牌${c ? fmtCard(c) : '無'}`, sortVal: c ? c.value : -1 };
+                  }).sort((a, b) => b.sortVal - a.sortVal);
+                  triggerVictory(p, '乞丐之王勝利：發動絕密乞丐之王，獨享勝利！', true, { title: '乞丐之王結算：存活玩家手牌', rows: handRows });
                   return;
                 }
               }
@@ -447,23 +545,33 @@
 
             let maxScore = -99;
             let winners = [];
+            const rows = [];
             alivePlayers.forEach(p => {
               const hand = hands[p.id] || [];
-              let finalVal = hand[0] ? hand[0].value : 0;
-              if (p.playedCards.some(c => c && c.title === '商人')) finalVal += 2;
-              if (hand[0] && hand[0].title === '科學怪人' && p.playedCards.length > 0) {
+              const card = hand[0];
+              let finalVal = card ? card.value : 0;
+              let detail = card ? `手牌${fmtCard(card)}` : '無手牌';
+              if (p.playedCards.some(c => c && c.title === '商人')) { finalVal += 2; detail += '＋商人 +2'; }
+              if (card && card.title === '科學怪人' && p.playedCards.length > 0) {
                 const vals = p.playedCards.filter(Boolean).map(c => c.value);
-                if (vals.length > 0) finalVal = Math.min(...vals) + Math.max(...vals);
+                if (vals.length > 0) {
+                  const mn = Math.min(...vals), mx = Math.max(...vals);
+                  finalVal = mn + mx;
+                  detail = `手牌${fmtCard(card)}面前最小(${mn})＋最大(${mx})`;
+                }
               }
+              rows.push({ id: p.id, name: p.name, text: `${p.name} ${detail} ＝ (${finalVal})`, final: finalVal });
               if (finalVal > maxScore) { maxScore = finalVal; winners = [p]; }
               else if (finalVal === maxScore) winners.push(p);
             });
+            rows.sort((a, b) => b.final - a.final);
+            const scores = { title: '最終點數結算（牌庫耗盡）', rows };
 
-            if (winners.length === 1) triggerVictory(winners[0], `數值勝利：手牌結算最高分 (${maxScore}分)！`);
-            else triggerVictory(winners, `數值平手：共同分享勝利 (${maxScore}分)！`);
+            if (winners.length === 1) triggerVictory(winners[0], `數值勝利：手牌結算最高分 (${maxScore}分)！`, false, scores);
+            else triggerVictory(winners, `數值平手：共同分享勝利 (${maxScore}分)！`, false, scores);
           };
 
-          const triggerVictory = (winner, reason, noWitch = false) => {
+          const triggerVictory = (winner, reason, noWitch = false, scores = null) => {
             if (gameOverRef.current) return;
             gameOverRef.current = true;
             const st = stateRef.current;
@@ -482,10 +590,14 @@
             winsRef.current = nextWins;
             setWins(nextWins);
             const matchWinners = [...new Set(winnerIds)].filter(id => nextWins[id] >= 2).map(id => (st.players.find(p => p.id === id) || {}).name);
-            setWinnerInfo({ winnerName: winnerText, reason, matchWinners });
+            const scoreRows = scores && scores.rows ? scores.rows.map(r => ({ ...r, win: winnerIds.includes(r.id) })) : null;
+            setWinnerInfo({ winnerName: winnerText, reason, matchWinners, winnerIds: [...new Set(winnerIds)], scores: scoreRows ? { title: scores.title, rows: scoreRows } : null });
             setBroadcastAction(`遊戲結束！【${winnerText}】獲勝`);
             setBroadcastResult(`➔ ${reason}`);
             setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '系統', action: `遊戲結束！【${winnerText}】獲勝`, result: reason, reveal: '', event: null, card: `遊戲結束！【${winnerText}】獲勝 ➔ ${reason}` }, ...prev]);
+            if (scoreRows && scoreRows.length) {
+              setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '系統', action: scores.title, result: scoreRows.map(r => `${r.win ? '🏆 ' : ''}${r.text}`).join('\n'), reveal: '', event: null, card: scores.title }, ...prev]);
+            }
           };
 
           const moonArenaCard = (moon, name, phase) => ({ ...moon, value: '🌙', category: `月亮 ${phase}/3`, icon: 'fa-moon', playedBy: name, isMoon: true });
@@ -778,7 +890,7 @@
                 setPlayerHands(prev => ({ ...prev, ...dealt }));
                 logActionAndResult(
                   `${source.name} 打出了(1)【醉漢】重洗手牌`,
-                  (skipped.length ? `全員手牌已重發（${skipped.map(p => p.name).join('、')} 受保護未參與）` : '全員手牌已重發') + (dealt[0] ? gotCardsText(dealt[0]) : ''),
+                  (skipped.length ? `全員手牌已重發（${skipped.map(p => p.name).join('、')} 受保護未參與）` : '全員手牌已重發') + (dealt[0] ? gotCardsText(dealt[0], stNow.playerHands[0]) : ''),
                   source.name
                 );
                 advanceTurn();
@@ -824,7 +936,7 @@
               const combined = [...center, ...aiHand];
               const keepCard = combined.pop();
               setCenterCards(shuffle(combined));
-              metaWatchman(sourceId, null);
+              metaWatchman(sourceId, null, '');
               setPlayerHands(prev => ({ ...prev, [sourceId]: [keepCard] }));
               logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【守夜人】`, '檢視中央暗牌 ➔ 重新洗牌歸位', sourcePlayer.name);
               advanceTurn();
@@ -860,7 +972,7 @@
                 const aH = playerHands[a.id] || [];
                 const bH = playerHands[b.id] || [];
                 setPlayerHands(prev => ({ ...prev, [a.id]: bH, [b.id]: aH }));
-                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, `秘密交換了 ${a.name} 與 ${b.name} 的手牌${a.id === 0 ? gotCardsText(bH) : (b.id === 0 ? gotCardsText(aH) : '')}`, sourcePlayer.name);
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, `秘密交換了 ${a.name} 與 ${b.name} 的手牌${a.id === 0 ? gotCardsText(bH, aH) : (b.id === 0 ? gotCardsText(aH, bH) : '')}`, sourcePlayer.name);
               }
               advanceTurn();
               return;
@@ -881,7 +993,7 @@
                 if (targetOldHand) setPlayers(prev => prev.map(p => p.id === randomTarget.id ? { ...p, playedCards: [...p.playedCards, { ...targetOldHand, revealedBy: 'BOUNTY' }] } : p));
                 setHandNow(randomTarget.id, [newDrawn]);
                 
-                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【賞金獵人】`, `強制重抽`, sourcePlayer.name, null, targetOldHand ? `${randomTarget.name} 公開手牌：(${targetOldHand.value})【${targetOldHand.title}】` : '');
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【賞金獵人】`, `強制重抽${randomTarget.id === 0 ? gotCardsText([newDrawn]) : ''}`, sourcePlayer.name, null, targetOldHand ? `${randomTarget.name} 公開手牌：(${targetOldHand.value})【${targetOldHand.title}】` : '');
                 
                 if (newDrawn.type === 'MAYOR' || newDrawn.type === 'WEREWOLF') {
                   logActionAndResult(`${randomTarget.name} 重抽至【${newDrawn.title}】`, `觸發死罪 ➔ ${randomTarget.name} 出局！`, randomTarget.name);
@@ -930,7 +1042,7 @@
                 const tHand = (playerHands[randomTarget.id] || [])[0];
                 const cardVal = 3;
                 const cardName = card.type === 'BARKEEPER' ? '酒保' : '小女孩';
-                const cmpType = '比大小';
+                const cmpType = card.type === 'BARKEEPER' ? '比小' : '比大';
                 if (sHand && tHand) {
                   if (card.type === 'BARKEEPER') {
                     if (sHand.value < tHand.value) {
@@ -962,7 +1074,7 @@
                 const sHand = playerHands[sourceId] || [];
                 const tHand = playerHands[randomTarget.id] || [];
                 setPlayerHands(prev => ({ ...prev, [sourceId]: tHand, [randomTarget.id]: sHand }));
-                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【${card.title}】`, `手牌交換成功！獲得額外回合${randomTarget.id === 0 ? gotCardsText(sHand) : ''}`, sourcePlayer.name);
+                logActionAndResult(`${sourcePlayer.name} 對 ${randomTarget.name} 打出了(${card.value})【${card.title}】`, `手牌交換成功！獲得額外回合${randomTarget.id === 0 ? gotCardsText(sHand, tHand) : ''}`, sourcePlayer.name);
                 setExtraTurnPlayerId(sourceId);
                 advanceTurn();
                 break;
@@ -1052,8 +1164,13 @@
               const combined = [...centerCards, ...myHand];
               const keptCard = combined.find(c => c.id === keepCardId) || combined[0];
               const remainingCenter = combined.filter(c => c.id !== keptCard.id);
-              setCenterCards(shuffle(remainingCenter));
-              metaWatchman(0, remainingCenter);
+              const shuffledCenter = shuffle(remainingCenter);
+              setCenterCards(shuffledCenter);
+              const oldHandCard = myHand[0];
+              const watchNoteText = (oldHandCard && keptCard.id !== oldHandCard.id)
+                ? `你換出 (${keptCard.value})【${keptCard.title}】、換入 (${oldHandCard.value})【${oldHandCard.title}】`
+                : '你沒有換出中央牌（留下原本的手牌）';
+              metaWatchman(0, shuffledCenter, watchNoteText);
               setPlayerHands(prev => ({ ...prev, 0: [keptCard] }));
               logActionAndResult('你 打出了(3)【守夜人】', '檢視並調整中央暗牌 ➔ 成功保留 1 張卡牌', '你');
               advanceTurn();
@@ -1075,7 +1192,7 @@
               const targetOldHand = (playerHands[targetId] || [])[0];
               if (targetOldHand) setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...p.playedCards, { ...targetOldHand, revealedBy: 'BOUNTY' }] } : p));
               setHandNow(targetId, [newDrawn]);
-              logActionAndResult(`你 對 ${target.name} 打出了(5)【賞金獵人】`, `強制重抽`, '你', null, targetOldHand ? `${target.name} 公開手牌：(${targetOldHand.value})【${targetOldHand.title}】` : '');
+              logActionAndResult(`你 對 ${targetId === 0 ? '自己' : target.name} 打出了(5)【賞金獵人】`, `強制重抽${targetId === 0 ? gotCardsText([newDrawn]) : ''}`, '你', null, targetOldHand ? `${target.name} 公開手牌：(${targetOldHand.value})【${targetOldHand.title}】` : '');
 
               if (newDrawn.type === 'MAYOR' || newDrawn.type === 'WEREWOLF') {
                 logActionAndResult(`${target.name} 重抽至【${newDrawn.title}】`, `觸發死罪 ➔ ${target.name} 出局！`, target.name);
@@ -1142,7 +1259,7 @@
               const sHand = playerHands[0] || [];
               const tHand = playerHands[targetId] || [];
               setPlayerHands(prev => ({ ...prev, 0: tHand, [targetId]: sHand }));
-              logActionAndResult(`你 對 ${target.name} 打出了(7)【小偷】`, `手牌交換成功！獲得額外回合${gotCardsText(tHand)}`, '你');
+              logActionAndResult(`你 對 ${target.name} 打出了(7)【小偷】`, `手牌交換成功！獲得額外回合${gotCardsText(tHand, sHand)}`, '你');
               setExtraTurnPlayerId(0);
               advanceTurn();
             } else if (type === 'PICKPOCKET') {
@@ -1314,6 +1431,19 @@
             return false;
           };
 
+          const handleNextGame = () => {
+            if (winnerInfo && winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) { winsRef.current = {}; setWins({}); }
+            initGame();
+          };
+          const nextGameLabel = (winnerInfo && winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) ? '開始新的一場' : '下一局';
+
+          // 結算後攤牌：單張牌的小標籤
+          const revealChip = (c, key) => c ? (
+            <span key={key} className="inline-flex items-center bg-slate-800 border border-amber-500/40 rounded px-1.5 py-0.5 text-[10.5px] whitespace-nowrap">{numEmoji(c.value)}<b className="font-black text-amber-300 ml-0.5">{c.title}</b></span>
+          ) : (
+            <span key={key} className="inline-flex items-center bg-slate-800/50 border border-dashed border-slate-600 rounded px-1.5 py-0.5 text-[10px] text-slate-500 whitespace-nowrap">已取走</span>
+          );
+
           const toggleAiPause = () => {
             const next = !pausedRef.current;
             pausedRef.current = next;
@@ -1336,10 +1466,19 @@
                       {version}
                     </span>
                   </div>
+                  {gameOver && winnerInfo && (
+                    <button onClick={handleNextGame} className="flex items-center space-x-1 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-md shadow active:scale-95 animate-pulse">
+                      <i className="fa-solid fa-forward-step text-[9px]"></i><span>{nextGameLabel}</span>
+                    </button>
+                  )}
                   <div className="flex items-center space-x-2">
                     <button onClick={toggleAiPause} className={`flex items-center space-x-1.5 border text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95 ${aiPaused ? 'bg-amber-500/20 border-amber-400/70 text-amber-300' : 'bg-slate-800/90 border-slate-500/50 text-slate-300'}`}>
                       <i className={`fa-solid ${aiPaused ? 'fa-play' : 'fa-pause'} text-[10px]`}></i>
                       <span className="font-bold text-[10px]">{aiPaused ? '繼續' : '暫停'}</span>
+                    </button>
+                    <button onClick={() => setIsRulesModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-amber-500/40 text-amber-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
+                      <i className="fa-solid fa-book-open text-amber-400 text-[10px]"></i>
+                      <span className="font-bold text-[10px]">規則</span>
                     </button>
                     <button onClick={() => setIsDeckModalOpen(true)} className="flex items-center space-x-1.5 bg-slate-800/90 border border-cyan-500/40 text-cyan-300 text-[11px] px-2 py-0.5 rounded-md shadow-sm active:scale-95">
                       <i className="fa-solid fa-layer-group text-cyan-400 text-[10px]"></i>
@@ -1399,10 +1538,10 @@
                                     <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-cyan-400 text-cyan-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-shield-halved"></i></span>
                                   )}
                                   {witchTargetOwner && witchTargetOwner.targetId === player.id && (
-                                    <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-purple-400 text-purple-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-hat-wizard"></i></span>
+                                    <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-purple-400 text-purple-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-wand-magic-sparkles"></i></span>
                                   )}
                                   {witchTargetOwner && witchTargetOwner.witchOwnerId === player.id && (
-                                    <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-pink-400 text-pink-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-wand-magic-sparkles"></i></span>
+                                    <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-pink-400 text-pink-300 flex items-center justify-center text-[7px]"><i className="fa-solid fa-hat-wizard"></i></span>
                                   )}
                                 </div>
                               </>
@@ -1431,7 +1570,7 @@
                     <div key={broadcastEvent ? broadcastEvent.key : 'plain'} className={`w-full bg-slate-900/95 border p-2 rounded-xl shadow-lg flex flex-col justify-center ${broadcastEvent ? (broadcastEvent.type === 'out' ? 'event-out' : 'event-revive') : 'border-emerald-500/50'}`}>
                       <div className="flex items-center space-x-1.5 overflow-hidden">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                        <span className="text-[11.5px] font-black text-emerald-300 truncate tracking-wide">{broadcastAction}</span>
+                        <span className="text-[11.5px] font-black text-emerald-300 truncate tracking-wide"><RichLog text={broadcastAction} nameClass="text-amber-300" /></span>
                         {broadcastEvent && (
                           <span className={`ml-auto shrink-0 flex items-center text-[9px] font-black ${broadcastEvent.type === 'out' ? 'text-rose-300' : 'text-emerald-300'}`}>
                             <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 animate-pulse ${broadcastEvent.type === 'out' ? 'bg-rose-400' : 'bg-emerald-400'}`}></span>{broadcastEvent.type === 'out' ? '出局' : '復活'}
@@ -1439,10 +1578,10 @@
                         )}
                       </div>
                       <div className="text-[10px] font-bold text-amber-300 line-clamp-2 pl-3.5 mt-0.5">
-                        {broadcastResult}
+                        <RichLog text={broadcastResult} nameClass="text-white" />
                       </div>
                       {broadcastReveal && (
-                        <div className="text-[10px] font-bold text-fuchsia-300 line-clamp-2 pl-3.5 mt-0.5"><i className="fa-solid fa-eye mr-1"></i>{broadcastReveal}</div>
+                        <div className="text-[10px] font-bold text-fuchsia-300 line-clamp-2 pl-3.5 mt-0.5"><i className="fa-solid fa-eye mr-1"></i><RichLog text={broadcastReveal} nameClass="text-fuchsia-100" /></div>
                       )}
                     </div>
                   </div>
@@ -1458,7 +1597,7 @@
                       </div>
                       
                     </div>
-                    <div className="absolute right-0 top-0 z-20">
+                    <div className="absolute right-0 top-0 z-20 flex flex-col items-end space-y-1">
                       <button
                         onClick={() => { setCenterPickMode(false); setIsCenterCardsModalOpen(true); }}
                         className="flex items-center space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 py-0.5 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
@@ -1466,15 +1605,62 @@
                         <i className="fa-solid fa-eye text-amber-400"></i>
                         <span className="font-bold text-amber-300">暗牌<span className="font-mono text-amber-400">{centerCards.filter(Boolean).length}</span>張</span>
                       </button>
+                      <div className="flex items-center space-x-1 bg-slate-900/90 border border-cyan-500/40 px-2 py-0.5 rounded-full text-[9.5px] shadow">
+                        <i className="fa-solid fa-box-archive text-cyan-400"></i>
+                        <span className="font-bold text-cyan-300">備用牌<span className="font-mono text-cyan-400">{reserveCards.filter(Boolean).length}</span>張</span>
+                      </div>
                     </div>
 
-                    {playedCardArena ? (
+                    {(gameOver && victoryDismissed) ? (
+                      <div className="absolute inset-x-0 top-7 bottom-0 overflow-y-auto scrollbar-none px-0.5 space-y-1.5 text-[10px]">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-amber-300 text-[11px]"><i className="fa-solid fa-eye mr-1"></i>全部攤牌</span>
+                          <button onClick={() => setVictoryDismissed(false)} className="text-[9.5px] font-bold text-purple-300 bg-slate-900/90 border border-purple-500/40 px-2 py-0.5 rounded-full active:scale-95">查看結算</button>
+                        </div>
+                        <div className="space-y-1">
+                          {players.map(p => {
+                            const hand = (playerHands[p.id] || []).filter(Boolean);
+                            const isWin = !!(winnerInfo && winnerInfo.winnerIds && winnerInfo.winnerIds.includes(p.id));
+                            const out = p.status === '出局';
+                            return (
+                              <div key={p.id} className={`flex items-center justify-between gap-1 rounded-lg border px-1.5 py-1 ${isWin ? 'border-amber-400/70 bg-amber-500/10' : 'border-slate-700 bg-slate-900/70'}`}>
+                                <span className="flex items-center gap-1 shrink-0">
+                                  <span>{p.emoji}</span>
+                                  <span className={`truncate ${p.id === 0 ? 'text-sky-300 font-black' : 'text-slate-200 font-bold'}`}>{p.name}</span>
+                                  {isWin && <span>🏆</span>}
+                                  {out && <span className="text-[9px] font-black text-rose-300 border border-rose-500/50 rounded px-1">出局</span>}
+                                </span>
+                                <span className="flex flex-wrap gap-1 justify-end">
+                                  {hand.length > 0 ? hand.map((c, i) => revealChip(c, i)) : <span className="text-slate-500">{out ? '手牌已公開於面前' : '無手牌'}</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="rounded-lg border border-amber-500/30 bg-slate-900/70 px-1.5 py-1">
+                          <div className="text-[9.5px] font-black text-amber-300 mb-1">中央暗牌</div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-1">
+                            {[0, 1, 2].map(i => (
+                              <span key={i} className="flex items-center gap-1"><span className="text-slate-400">暗牌{i + 1}</span>{revealChip(centerCards[i], i)}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-cyan-500/30 bg-slate-900/70 px-1.5 py-1">
+                          <div className="text-[9.5px] font-black text-cyan-300 mb-1">備用牌堆</div>
+                          <div className="flex flex-wrap gap-x-2 gap-y-1">
+                            {[0, 1].map(i => (
+                              <span key={i} className="flex items-center gap-1"><span className="text-slate-400">備用{i + 1}</span>{revealChip(reserveCards[i], i)}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : playedCardArena ? (
                       <div key={playedCardArena.id} className="relative group animate-card-play scale-[0.85] origin-center -my-2">
                         <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 to-red-600 rounded-2xl blur-md opacity-75 transition duration-1000"></div>
                         <div className="relative w-48 h-64 bg-slate-900 border-2 border-amber-400 rounded-xl p-3 flex flex-col justify-between shadow-2xl overflow-hidden">
                           <div className="flex justify-between items-start">
                             <span className="bg-amber-500 text-slate-950 text-base font-black w-8 h-8 rounded-full flex items-center justify-center shadow font-mono">{playedCardArena.value}</span>
-                            <span className="text-[10px] bg-slate-800 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">{playedCardArena.category}</span>
+                            {playedCardArena.isMoon && <span className="text-[10px] bg-slate-800 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">{playedCardArena.category}</span>}
                           </div>
                           <div className="w-full h-24 my-1 rounded-lg bg-slate-800 border border-slate-700/70 flex items-center justify-center relative overflow-hidden">
                             <i className={`fa-solid ${playedCardArena.icon} text-5xl text-amber-400/80 filter drop-shadow`}></i>
@@ -1518,7 +1704,7 @@
                     const front = getFrontCards(me);
                     if (front.length === 0) return null;
                     return (
-                      <div className="absolute left-1.5 top-2 bottom-1.5 z-30 flex flex-col justify-end items-start gap-0.5 pointer-events-none overflow-hidden">
+                      <div className="absolute left-1.5 top-2 bottom-1.5 z-30 flex flex-col justify-start items-start gap-0.5 pointer-events-none overflow-hidden">
                         <span className="text-[8px] leading-none text-slate-400">🃏 面前 {front.length}</span>
                         {front.map((c, i) => {
                           const active = isCardActive(me, c);
@@ -1552,7 +1738,6 @@
                             >
                               <div className="flex justify-between items-center">
                                 <span className={`${isSelected ? 'bg-amber-500' : 'bg-cyan-500'} text-slate-950 text-sm font-black w-6 h-6 rounded-full flex items-center justify-center font-mono`}>{card.value}</span>
-                                <span className="text-[9px] text-cyan-300 font-bold bg-slate-800/80 px-1.5 py-0.5 rounded border border-cyan-500/30">{card.category}</span>
                               </div>
                               <div className="w-full h-16 bg-slate-800/90 rounded-lg border border-slate-700/60 flex items-center justify-center my-1">
                                 <i className={`fa-solid ${card.icon} text-3xl text-cyan-400 filter drop-shadow`}></i>
@@ -1609,6 +1794,8 @@
                   players={players} 
                   playerHands={playerHands}
                   centerCards={centerCards}
+                  remainingCounts={remainingCounts}
+                  allCards={ALL_CARDS}
                   onSubmit={handleHumanInteractionSubmit}
                   onCancel={() => { 
                     // 取消時：收回剛才準備打出的牌，完全不執行效果並還原至兩張手牌狀態
@@ -1644,27 +1831,78 @@
               )}
 
               {/* 遊戲結束勝利彈窗 */}
-              {gameOver && winnerInfo && (
+              {gameOver && winnerInfo && !victoryDismissed && (
                 <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
-                  <div className="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-400/80 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center relative overflow-hidden">
+                  <div className="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-400/80 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center relative overflow-y-auto max-h-[90vh]">
                     <i className="fa-solid fa-trophy text-5xl text-amber-400 mb-3 filter drop-shadow"></i>
                     <h2 className="text-xl font-black text-amber-300 mb-1">【{winnerInfo.winnerName}】</h2>
                     <p className="text-xs text-emerald-300 font-bold mb-3">{winnerInfo.reason}</p>
                     {winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0 && (
                       <p className="text-[11px] text-amber-300 font-black mb-3"><i className="fa-solid fa-moon mr-1"></i>【{winnerInfo.matchWinners.join(' & ')}】累計 2 勝，贏得整場！</p>
                     )}
+                    {winnerInfo.scores && winnerInfo.scores.rows.length > 0 && (
+                      <div className="text-left bg-slate-900/70 border border-slate-700 rounded-lg p-2 mb-3 space-y-1">
+                        <div className="text-[10px] font-black text-cyan-300">{winnerInfo.scores.title}</div>
+                        {winnerInfo.scores.rows.map(r => (
+                          <div key={r.id} className={`text-[10.5px] leading-snug ${r.win ? 'text-amber-200 font-black' : 'text-slate-300'}`}>
+                            {r.win ? '🏆 ' : '　'}<RichLog text={r.text} nameClass={r.win ? 'text-white' : 'text-amber-300'} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <button
-                      onClick={() => setIsHistoryModalOpen(true)}
+                      onClick={() => setVictoryDismissed(true)}
                       className="w-full mb-2 bg-slate-800 hover:bg-slate-700 text-purple-300 font-bold text-xs py-2 rounded-xl border border-purple-500/40 active:scale-95 transition"
                     >
-                      <i className="fa-solid fa-clock-rotate-left mr-1"></i>查看記錄
+                      <i className="fa-solid fa-eye mr-1"></i>返回大廳查看
                     </button>
                     <button 
-                      onClick={() => { if (winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) { winsRef.current = {}; setWins({}); } initGame(); }} 
+                      onClick={handleNextGame} 
                       className="w-full bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-sm py-2.5 rounded-xl shadow-lg hover:brightness-110 active:scale-95 transition"
                     >
                       {winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0 ? '開始新的一場' : '下一局'}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 彈窗：遊戲規則與角色技能 */}
+              {isRulesModalOpen && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsRulesModalOpen(false)}>
+                  <div className="bg-slate-900 border border-amber-500/50 rounded-2xl w-full max-w-sm p-4 shadow-2xl relative" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                      <div className="flex items-center space-x-2">
+                        <i className="fa-solid fa-book-open text-amber-400"></i>
+                        <h3 className="text-sm font-bold text-amber-300">遊戲規則與角色技能</h3>
+                      </div>
+                      <button onClick={() => setIsRulesModalOpen(false)} className="text-slate-400 hover:text-white text-base">
+                        <i className="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                    <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1 text-xs scrollbar-none">
+                      {RULES_SECTIONS.map(sec => (
+                        <div key={sec.title}>
+                          <div className="text-[11px] font-black text-cyan-300 mb-1">{sec.title}</div>
+                          <ul className="space-y-1 text-[11px] text-slate-300 leading-snug list-disc pl-4">
+                            {sec.items.map((it, i) => <li key={i}>{it}</li>)}
+                          </ul>
+                        </div>
+                      ))}
+                      <div>
+                        <div className="text-[11px] font-black text-cyan-300 mb-1">角色技能（數值 0–10）</div>
+                        <div className="space-y-1">
+                          {RULES_CARDS.map((c, i) => (
+                            <div key={i} className="flex items-start space-x-2 bg-slate-800/50 rounded p-1.5">
+                              <span className="bg-amber-500 text-slate-950 text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-mono">{c.v}</span>
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-bold text-slate-100">{c.name}</div>
+                                <div className="text-[10px] text-slate-400 leading-snug">{c.d}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1736,9 +1974,9 @@
                                 </span>
                               )}
                             </div>
-                            <div className="text-slate-200 font-semibold">{log.action !== undefined ? log.action : log.card}</div>
-                            {log.action !== undefined && log.result && <div className="text-amber-300 font-bold mt-0.5">➔ {log.result}</div>}
-                            {log.reveal && <div className="text-fuchsia-300 font-bold mt-0.5"><i className="fa-solid fa-eye mr-1"></i>{log.reveal}</div>}
+                            <div className="text-slate-200 font-semibold"><RichLog text={log.action !== undefined ? log.action : log.card} nameClass="text-amber-300" /></div>
+                            {log.action !== undefined && log.result && <div className="text-amber-300 font-bold mt-0.5 whitespace-pre-line">➔ <RichLog text={log.result} nameClass="text-white" /></div>}
+                            {log.reveal && <div className="text-fuchsia-300 font-bold mt-0.5"><i className="fa-solid fa-eye mr-1"></i><RichLog text={log.reveal} nameClass="text-fuchsia-100" /></div>}
                           </div>
                         );
                       }) : (
@@ -1758,7 +1996,6 @@
                   <div className={`w-[130px] h-[190px] bg-slate-900 border-2 rounded-xl p-2 flex flex-col justify-between shadow-2xl ${dragGhost.over ? 'border-emerald-400 shadow-[0_0_22px_rgba(52,211,153,0.7)]' : 'border-amber-400'}`}>
                     <div className="flex justify-between items-center">
                       <span className="bg-amber-500 text-slate-950 text-sm font-black w-6 h-6 rounded-full flex items-center justify-center font-mono">{dragGhost.card.value}</span>
-                      <span className="text-[9px] text-cyan-300 font-bold bg-slate-800/80 px-1.5 py-0.5 rounded border border-cyan-500/30">{dragGhost.card.category}</span>
                     </div>
                     <div className="w-full h-16 bg-slate-800/90 rounded-lg border border-slate-700/60 flex items-center justify-center my-1">
                       <i className={`fa-solid ${dragGhost.card.icon} text-3xl text-amber-400`}></i>
@@ -1790,15 +2027,15 @@
                       <div className="flex flex-wrap gap-1 mb-3 text-[10px] font-bold">
                         <span className={`px-1.5 py-0.5 rounded border ${vp.status === '存活' ? 'border-emerald-500/60 text-emerald-300' : 'border-slate-600 text-slate-400'}`}>{vp.status}</span>
                         {vp.protected && vp.status === '存活' && <span className="px-1.5 py-0.5 rounded border border-cyan-400 text-cyan-300"><i className="fa-solid fa-shield-halved mr-1"></i>守護中</span>}
-                        {isTarget && <span className="px-1.5 py-0.5 rounded border border-purple-400 text-purple-300"><i className="fa-solid fa-hat-wizard mr-1"></i>女巫復活（與 {ownerName} 共同勝利）</span>}
-                        {isOwner && <span className="px-1.5 py-0.5 rounded border border-pink-400 text-pink-300"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i>女巫持有者（綁定 {targetName}）</span>}
+                        {isTarget && <span className="px-1.5 py-0.5 rounded border border-purple-400 text-purple-300"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i>女巫復活（與 {ownerName} 共同勝利）</span>}
+                        {isOwner && <span className="px-1.5 py-0.5 rounded border border-pink-400 text-pink-300"><i className="fa-solid fa-hat-wizard mr-1"></i>女巫持有者（綁定 {targetName}）</span>}
                       </div>
                       <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 scrollbar-none">
                         {cards.length > 0 ? cards.map((c, i) => (
                           <div key={(c.id || c.title) + '-' + i} className="bg-slate-800/60 border border-slate-700 rounded-lg p-2 flex items-start space-x-2">
                             <span className="bg-amber-500 text-slate-950 text-sm font-black w-7 h-7 rounded-full flex items-center justify-center shrink-0 font-mono">{c.value}</span>
                             <div className="min-w-0">
-                              <div className="text-xs font-bold text-amber-300">{c.title} <span className="text-[10px] text-slate-400 font-normal">{c.category}</span>{c.revealedBy === 'BOUNTY' && <span className="text-[10px] text-rose-300 ml-1">賞金獵人公開</span>}{isCardActive(vp, c) && <span className="text-[10px] text-emerald-300 ml-1 bg-emerald-950/80 border border-emerald-500/50 px-1 rounded font-bold">生效中</span>}</div>
+                              <div className="text-xs font-bold text-amber-300">{c.title}{c.revealedBy === 'BOUNTY' && <span className="text-[10px] text-rose-300 ml-1">賞金獵人公開</span>}{isCardActive(vp, c) && <span className="text-[10px] text-emerald-300 ml-1 bg-emerald-950/80 border border-emerald-500/50 px-1 rounded font-bold">生效中</span>}</div>
                               <div className="text-[10px] text-slate-300 leading-snug">{c.desc}</div>
                             </div>
                           </div>
@@ -1815,8 +2052,6 @@
               {/* 彈窗 3：暗牌區檢視／拿一還一選牌 */}
               {isCenterCardsModalOpen && (() => {
                 const nameOf = (id) => id === 0 ? '你' : ((players.find(p => p.id === id) || {}).name || '?');
-                const pinned = new Set(centerMeta.filter(m => m.myCard && !m.myStale).map(m => m.myCard.id));
-                const restKnown = (centerKnownSet || []).filter(c => !pinned.has(c.id));
                 return (
                   <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-slate-900 border border-amber-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
@@ -1828,6 +2063,13 @@
                         <button onClick={closeCenterModal} className="text-slate-400 hover:text-white text-base">
                           <i className="fa-solid fa-xmark"></i>
                         </button>
+                      </div>
+
+                      <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1.5 mb-3 leading-snug">
+                        <i className="fa-solid fa-circle-info mr-1"></i>
+                        {centerPickMode
+                          ? '拿一還一：選 1 格暗牌拿走，再拖曳 1 張手牌到戰場，放回同一格；放回後直接結束回合。'
+                          : '拿一還一：選 1 格暗牌拿走，再放回 1 張手牌到同一格；放回後直接結束回合。'}
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 py-1">
@@ -1867,9 +2109,9 @@
                               </button>
                               <span className="text-[9px] text-amber-300 font-bold mt-1">暗牌 {i + 1}</span>
                               <div className="text-[8.5px] leading-tight text-center mt-0.5 space-y-0.5 w-full">
-                                {m.viewedBy.length > 0 && <div className="text-sky-300 break-words"><i className="fa-solid fa-eye mr-0.5"></i>{m.viewedBy.map(nameOf).join('、')}</div>}
-                                {m.swappedBy.length > 0 && <div className="text-rose-300 break-words"><i className="fa-solid fa-right-left mr-0.5"></i>{m.swappedBy.map(nameOf).join('、')}</div>}
-                                {m.viewedBy.length === 0 && m.swappedBy.length === 0 && <div className="text-slate-500">未被動過</div>}
+                                {m.swappedBy.length > 0
+                                  ? <div className="text-rose-300 break-words"><i className="fa-solid fa-right-left mr-0.5"></i>{m.swappedBy.map(nameOf).join('、')}</div>
+                                  : <div className="text-slate-500">未被換過</div>}
                               </div>
                             </div>
                           );
@@ -1877,10 +2119,19 @@
                       </div>
 
                       <p className="text-[9px] text-slate-400 mt-2 leading-snug">
-                        <i className="fa-solid fa-eye text-sky-300 mr-0.5"></i>看過　<i className="fa-solid fa-right-left text-rose-300 mr-0.5"></i>換過（拿一還一、守夜人）。虛線＝你看過的舊資訊，之後有人動過，內容未必還是原本那張。
+                        <i className="fa-solid fa-right-left text-rose-300 mr-0.5"></i>換過（拿一還一）。虛線＝你看過的舊資訊，之後有人動過，內容未必還是原本那張。
                       </p>
-                      {restKnown.length > 0 && (
-                        <p className="text-[9px] text-cyan-300 mt-1 leading-snug">守夜人看過（順序未知）：{restKnown.map(c => `(${c.value})${c.title}`).join('、')}</p>
+                      {watchLog.length > 0 && (
+                        <div className="mt-1.5 space-y-0.5">
+                          {watchLog.map(w => (
+                            <p key={w.id} className="text-[9px] text-sky-300 leading-snug"><i className="fa-solid fa-binoculars mr-0.5"></i>守夜人：{nameOf(w.pid)} 看過 3 張、換過 1 張（不知哪一格，順序已洗）</p>
+                          ))}
+                        </div>
+                      )}
+                      {watchNote && watchNote.text && (
+                        <p className={`text-[9px] mt-1 leading-snug ${watchNote.stale ? 'text-slate-500' : 'text-cyan-300'}`}>
+                          <i className="fa-solid fa-binoculars mr-0.5"></i>{watchNote.text}{watchNote.stale ? '（舊資訊）' : ''}
+                        </p>
                       )}
 
                       {centerPickMode ? (
@@ -1892,7 +2143,7 @@
                         </div>
                       ) : (
                         <>
-                          <p className="text-[10px] text-slate-400 text-center mt-2 mb-3">使用「拿一還一」可自選一格暗牌；放回的牌會放在同一格。</p>
+                          <div className="h-3"></div>
                           <button onClick={closeCenterModal} className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs py-2 rounded-xl border border-slate-700 transition">
                             關閉
                           </button>
@@ -1908,7 +2159,7 @@
         }
 
         // 互動對話框組件
-        function InteractionDialog({ modal, players, playerHands, centerCards, onSubmit, onCancel }) {
+        function InteractionDialog({ modal, players, playerHands, centerCards, remainingCounts, allCards, onSubmit, onCancel }) {
           const [selectedTarget, setSelectedTarget] = useState('');
           const [secondaryTarget, setSecondaryTarget] = useState('');
           const [guessedVal, setGuessedVal] = useState('0');
@@ -1920,6 +2171,17 @@
           const deadTargets = players.filter(p => p.status === '出局');
 
           const isGuess = modal.type === 'VILLAGER' || modal.type === 'ASSASSIN';
+
+          // 猜測用：各數值尚未現身的角色與張數（牌庫清單的剩餘數，再扣掉自己手上的牌）
+          const unseenText = (v) => {
+            const myTitles = (playerHands[0] || []).filter(Boolean).map(c => c.title);
+            const parts = (allCards || []).filter(c => c.value === v).map(c => {
+              const base = ((remainingCounts || {})[c.title] || { current: c.totalCount }).current;
+              const n = Math.max(0, base - myTitles.filter(t => t === c.title).length);
+              return n > 0 ? `${c.title}${n > 1 ? '×' + n : ''}` : null;
+            }).filter(Boolean);
+            return parts.length ? parts.join('、') : '已無';
+          };
 
           // 掘墓人選定的玩家面前可奪取卡牌
           const gravediggerTarget = players.find(p => p.id.toString() === selectedTarget);
@@ -2016,9 +2278,10 @@
                       </>
                     ) : (
                       <div>
-                        <label className="block text-slate-400 mb-1">選擇對手目標：</label>
+                        <label className="block text-slate-400 mb-1">{modal.type === 'BOUNTY_HUNTER' ? '選擇目標（可選自己）：' : '選擇對手目標：'}</label>
                         <select value={selectedTarget} onChange={e => setSelectedTarget(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
                           <option value="">-- 請選擇 --</option>
+                          {modal.type === 'BOUNTY_HUNTER' && <option value="0">你自己</option>}
                           {aliveTargets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                       </div>
@@ -2029,7 +2292,7 @@
                       <div>
                         <label className="block text-slate-400 mb-1">{modal.type === 'ASSASSIN' ? '第 1 次猜測數值 (0–10)：' : '宣告手牌數值 (0–10)：'}</label>
                         <select value={guessedVal} onChange={e => { const v = e.target.value; setGuessedVal(v); if (v === guessedVal2) setGuessedVal2(v === '0' ? '1' : '0'); }} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-amber-300 font-bold">
-                          {[...Array(11).keys()].map(v => <option key={v} value={v}>數值 {v}</option>)}
+                          {[...Array(11).keys()].map(v => <option key={v} value={v}>數值 {v}（{unseenText(v)}）</option>)}
                         </select>
                       </div>
                     )}
@@ -2037,7 +2300,7 @@
                       <div>
                         <label className="block text-slate-400 mb-1">第 2 次猜測數值 (0–10，同一目標)：</label>
                         <select value={guessedVal2} onChange={e => setGuessedVal2(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-amber-300 font-bold">
-                          {[...Array(11).keys()].filter(v => v.toString() !== guessedVal).map(v => <option key={v} value={v}>數值 {v}</option>)}
+                          {[...Array(11).keys()].filter(v => v.toString() !== guessedVal).map(v => <option key={v} value={v}>數值 {v}（{unseenText(v)}）</option>)}
                         </select>
                       </div>
                     )}
