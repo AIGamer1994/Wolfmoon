@@ -207,7 +207,7 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 5000, swap: 2700, drunk: 3000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200 };
+        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 5000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200 };
         // 被動牌打出時「沒有任何效果（原因）」的原因（動態廣播、行動紀錄、置於面前動畫共用）
         const PASSIVE_WHY = {
           '乞丐之王': '結算時才發動',
@@ -222,7 +222,7 @@
         const fxHold = (f) => (f && f.kind === 'place' ? 2000 : 1000);
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
-        const FX_TOTAL_BY = { compare: 5500, grave: 4600, place: 4000, servant: 4000 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
+        const FX_TOTAL_BY = { compare: 5500, grave: 4600, place: 4000, servant: 4000, drunk: 5000 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -319,6 +319,12 @@
             const skippedNames = sm ? sm[1].split('、') : [];
             fx.participants = players.filter(p => p.status === '存活' && !skippedNames.includes(p.name));
             fx.skipped = players.filter(p => skippedNames.includes(p.name));
+            // 玩家自己洗入了哪張、拿到哪張（紀錄文字「｜你 換出 (X)【牌】、取得 (Y)【牌】」；只有玩家自己的資訊）
+            const mm = /你 換出 \((\d+)\)【([^】]+)】、取得 \((\d+)\)【([^】]+)】/.exec(res);
+            if (mm) {
+              const mk = (v, t) => { const mt = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === t); return { value: parseInt(v, 10), title: t, icon: mt && mt.icon }; };
+              fx.mine = { out: mk(mm[1], mm[2]), in: mk(mm[3], mm[4]) };
+            }
             if (!fx.participants.length) kind = fx.kind = 'plain';
           } else if (kind === 'bounty') {
             const bm = /\((\d+)\)【([^】]+)】/.exec(String(reveal || ''));
@@ -618,6 +624,19 @@
                     );
                   })}
                 </div>
+                {fx.mine && (
+                  <div className="flex items-center gap-2" style={an('fxPop', 0.4, 2.9)}>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-[10px] font-black text-sky-300">你洗入</span>
+                      <FxFace c={fx.mine.out} cls="w-12 h-[60px]" />
+                    </div>
+                    <i className="fa-solid fa-arrow-right text-amber-400 text-sm"></i>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className="text-[10px] font-black text-sky-300">你拿到</span>
+                      <FxFace c={fx.mine.in} cls="w-12 h-[60px]" />
+                    </div>
+                  </div>
+                )}
                 {fx.skipped && fx.skipped.length > 0 && (
                   <div className="text-[9px] font-bold text-cyan-300" style={an('fxFadeUp', 0.4, 0.5)}><i className="fa-solid fa-shield-halved mr-1"></i>{fx.skipped.map(p => p.name).join('、')} 受保護未參與</div>
                 )}
@@ -829,7 +848,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.5 M');
+          const [version] = useState('v0.0.6 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -847,6 +866,7 @@
           const [gameOver, setGameOver] = useState(false);
           const [winnerInfo, setWinnerInfo] = useState(null);
           const [wins, setWins] = useState({}); // 勝場月亮標記（跨局累計）
+          const [victoryReady, setVictoryReady] = useState(false); // 勝利視窗：所有效果動畫（含停留）播完才出現
           const [victoryDismissed, setVictoryDismissed] = useState(false); // 勝利視窗已關閉（返回牌桌查看全部牌）
 
           // 牌庫、備用牌、手牌、中央牌
@@ -923,6 +943,12 @@
             fxUntilRef.current = Date.now() + f.duration + f.hold;
             fxTimerRef.current = setTimeout(() => setFx(null), f.duration + f.hold + 60);
           };
+          useEffect(() => {
+            if (!gameOver) { setVictoryReady(false); return; }
+            if (fx) return;
+            const t = setTimeout(() => setVictoryReady(true), 400);
+            return () => clearTimeout(t);
+          }, [gameOver, fx]);
           // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
           const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
           // 回放播完（或點一下離開）➔ 回到行動紀錄彈窗
@@ -2564,7 +2590,7 @@
               )}
 
               {/* 遊戲結束勝利彈窗 */}
-              {gameOver && winnerInfo && !victoryDismissed && (
+              {gameOver && winnerInfo && victoryReady && !victoryDismissed && (
                 <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
                   <div className="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-400/80 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center relative overflow-y-auto max-h-[90vh]">
                     <i className="fa-solid fa-trophy text-5xl text-amber-400 mb-3 filter drop-shadow"></i>
