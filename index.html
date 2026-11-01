@@ -100,6 +100,15 @@
         }
 
         @keyframes fxTakeSlot { 0% { transform: translateY(0); } 30%, 55% { transform: translateY(-16px); } 100% { transform: translateY(0); } }
+        @keyframes fxOut { 0% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes fxToFront { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(-84px, 75px) scale(.65); } }
+        @keyframes fxGraveMove {
+          0% { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(.7); }
+          12% { opacity: 1; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(1.1); }
+          50% { opacity: 1; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(1.1); }
+          100% { opacity: 1; transform: translate(0, 0) scale(1); }
+        }
+        @keyframes fxDiscard { 0% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); } 100% { opacity: 0; transform: translate(84px, -70px) scale(.5) rotate(28deg); } }
 
         @keyframes btnBlinkG { 0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); border-color: rgba(16,185,129,.4); } 50% { box-shadow: 0 0 14px 3px rgba(52,211,153,.85); border-color: #6ee7b7; } }
         @keyframes btnBlinkB { 0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0); border-color: rgba(59,130,246,.4); } 50% { box-shadow: 0 0 14px 3px rgba(96,165,250,.85); border-color: #93c5fd; } }
@@ -197,9 +206,10 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 3000, swap: 2700, drunk: 3000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 2700, witch: 2500, selfout: 2100, plain: 2200, none: 1600 };
+        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 5000, swap: 2700, drunk: 3000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200 };
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
+        const FX_TOTAL_BY = { compare: 5500, grave: 4600, place: 4000, servant: 4000 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -209,6 +219,12 @@
 
         // 由「動作行 + 結果行」推導動畫內容。只使用公開資訊；解析失敗回傳 null（不播動畫）
         function deriveFx(actionText, resultText, reveal, st) {
+          const sv = /^(\S+) 棄掉面前【僕人】/.exec(String(actionText || ''));
+          if (sv && st && st.players) {
+            const ssrc = st.players.find(p => p.name === sv[1]) || null;
+            if (!ssrc) return null;
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'servant', card: { title: '僕人', value: 1, icon: 'fa-bell-concierge' }, src: ssrc, tgt: null, tone: 'ok', baseDur: FX_DURATION.servant, duration: FX_TOTAL_BY.servant };
+          }
           const tk = /^(\S+) 執行【拿一還一】/.exec(String(actionText || ''));
           if (tk && st && st.players) {
             const tsrc = st.players.find(p => p.name === tk[1]) || null;
@@ -238,14 +254,21 @@
           else if (/出局|淘汰/.test(res)) tone = 'out';
           else if (/失敗/.test(res)) tone = 'fail';
 
-          if (!FX_SHOW_NONE && (tone === 'none' || meta.title === '僕人')) return null;
           let kind = FX_KIND[meta.title] || 'plain';
-          if (tone === 'none' || meta.title === '僕人') kind = 'none';
-          else if (tone === 'nofx') kind = 'plain';
+          // 無效果／能力落空／僕人 ➔ 牌放到面前的動畫
+          if (tone === 'none' || tone === 'nofx' || meta.title === '僕人') kind = 'place';
           const needTgt = ['guess', 'ask', 'peek', 'bounty', 'grave'];
           if (needTgt.includes(kind) && !tgt) kind = 'plain';
 
           const fx = { key: `${Date.now()}-${Math.random()}`, kind, card, src, tgt, tone, noneText: meta.title === '僕人' ? '置於面前・待命' : '無效果' };
+
+          if (kind === 'place') {
+            const rm = /[（(]([^）)]+)[）)]/.exec(res);
+            fx.lasting = ['僕人', '商人', '煉金術士'].includes(meta.title);
+            if (meta.title === '僕人') fx.reason = '待命：回合結束時可棄掉，換額外回合';
+            else if (meta.type === 'PASSIVE') fx.reason = '被動牌・結算時才啟動';
+            else { fx.noEffect = true; fx.reason = rm ? rm[1] : res.replace(/^[➔\s]+/, '').replace(/^(沒有任何效果|無任何效果)[：:\s]*/, '').slice(0, 30); }
+          }
 
           if (kind === 'guess') {
             const gm = /猜\((\d+)\)(?:與\((\d+)\))?/.exec(tail);
@@ -315,15 +338,25 @@
           else if (tone === 'spy') fx.stampOn = (elim && fx.tgt && elim.id === fx.tgt.id) ? 'tgt' : 'src';
           else fx.stampOn = 'tgt';
           fx.baseDur = FX_DURATION[kind] || 2200;
-          fx.duration = kind === 'none' ? fx.baseDur : FX_TOTAL;
+          fx.duration = kind === 'none' ? fx.baseDur : (FX_TOTAL_BY[kind] || FX_TOTAL);
           return fx;
         }
 
+        function Avatar({ p, size = 'w-11 h-11', glow = '' }) {
+          const [bad, setBad] = React.useState(false);
+          return (
+            <div className={`${size} rounded-full bg-gradient-to-tr ${p.gradient} p-0.5 shadow shrink-0 ${glow}`}>
+              {bad
+                ? <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center text-[0.9em] leading-none">{p.emoji}</div>
+                : <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${p.seed}`} alt={p.name} onError={() => setBad(true)} className="w-full h-full rounded-full bg-slate-900" />}
+            </div>
+          );
+        }
         function FxChip({ p, size = 'w-11 h-11 text-xl', dim = false, glow = '' }) {
           if (!p) return null;
           return (
             <div className={`flex flex-col items-center gap-0.5 ${dim ? 'opacity-40' : ''}`}>
-              <div className={`${size} rounded-full bg-gradient-to-br ${p.gradient} flex items-center justify-center border-2 border-white/30 shadow-lg ${glow}`}>{p.emoji}</div>
+              <Avatar p={p} size={size} glow={glow} />
               <span className={`text-[10px] leading-none font-black whitespace-nowrap ${p.id === 0 ? 'text-sky-300' : 'text-slate-100'}`}>{p.name}</span>
             </div>
           );
@@ -355,9 +388,19 @@
           );
         }
 
-        function FxOverlay({ fx, onSkip }) {
+        function FxOverlay({ fx, onSkip, replay }) {
           const { kind, card, src, tgt } = fx;
           const bodyRef = React.useRef(null);
+          const slotRef = React.useRef(null), stolenRef = React.useRef(null), tgtRef = React.useRef(null);
+          // 掘墓人：量出「目標頭像」到「出牌者左邊空位」的距離，讓奪取的牌從目標那邊滑過來
+          React.useLayoutEffect(() => {
+            const sl = slotRef.current, tg = tgtRef.current, el = stolenRef.current;
+            if (!sl || !tg || !el) return;
+            const dx = (tg.offsetLeft + tg.offsetWidth / 2) - (sl.offsetLeft + sl.offsetWidth / 2);
+            const dy = (tg.offsetTop + tg.offsetHeight / 2) - (sl.offsetTop + sl.offsetHeight / 2);
+            el.style.setProperty('--dx', `${dx}px`);
+            el.style.setProperty('--dy', `${dy}px`);
+          }, []);
           React.useLayoutEffect(() => {
             const r = (fx.baseDur || fx.duration) / fx.duration;
             if (r === 1 || !bodyRef.current || !bodyRef.current.getAnimations) return;
@@ -372,6 +415,60 @@
             body = (
               <div className="px-3 py-1 rounded-full bg-slate-800/90 border border-slate-600 text-slate-300 text-[11px] font-black shadow-lg">
                 <span className="font-mono text-amber-300 mr-1">{card.value}</span>{card.title}｜{fx.noneText}
+              </div>
+            );
+          } else if (kind === 'place') {
+            // 牌打出後，縮小滑到頭像下邊的「面前」位置
+            body = (
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="relative w-[200px] h-[144px]">
+                  <div className="absolute left-[36px] top-0" style={an('fxInL', 0.4, 0)}><FxChip p={src} size="w-14 h-14 text-2xl" /></div>
+                  <div className="absolute left-[44px] top-[86px] w-[40px] h-[54px] rounded-md border-2 border-dashed border-slate-500/70 flex items-end justify-center" style={an('fxFadeUp', 0.4, 0.5)}>
+                    <span className="text-[8px] text-slate-500 mb-0.5">面前</span>
+                  </div>
+                  <div className="absolute left-[120px] top-0 z-10" style={an('fxPop', 0.4, 0.15)}>
+                    <div style={an('fxToFront', 0.7, 1.0, 'ease-in-out')}><FxFace c={card} cls="w-14 h-[76px]" /></div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-500/70 text-slate-200 text-[10px] font-black" style={an('fxPop', 0.3, 1.8)}>
+                    <i className="fa-solid fa-layer-group mr-1"></i>置於面前
+                  </span>
+                  {fx.lasting && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-900/70 border border-emerald-500/60 text-emerald-200 text-[10px] font-black" style={an('fxPop', 0.3, 2.0)}>
+                      <i className="fa-solid fa-bolt mr-1"></i>生效中
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] font-black text-center px-2 text-rose-300" style={an('fxFadeUp', 0.4, 2.2)}>
+                  沒有任何效果{fx.reason ? `（${fx.reason}）` : ''}
+                </div>
+              </div>
+            );
+          } else if (kind === 'servant') {
+            // 棄掉面前的僕人 ➔ 額外回合
+            body = (
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="relative w-[200px] h-[144px]">
+                  <div className="absolute left-[36px] top-0" style={an('fxInL', 0.4, 0)}><FxChip p={src} size="w-14 h-14 text-2xl" /></div>
+                  <div className="absolute left-[44px] top-[86px] w-[40px] h-[54px] rounded-md border-2 border-dashed border-slate-500/70 flex items-end justify-center" style={an('fxFadeUp', 0.4, 0.3)}>
+                    <span className="text-[8px] text-slate-500 mb-0.5">面前</span>
+                  </div>
+                  <div className="absolute left-[36px] top-[75px] z-10" style={{ transform: 'scale(.65)' }}>
+                    <div style={an('fxPop', 0.4, 0.2)}>
+                      <div style={an('fxDiscard', 0.7, 1.1, 'ease-in')}><FxFace c={card} cls="w-14 h-[76px]" /></div>
+                    </div>
+                  </div>
+                  <span className="absolute left-[96px] top-[100px] px-1.5 py-0.5 rounded-full bg-emerald-900/70 border border-emerald-500/60 text-emerald-200 text-[9px] font-black" style={{ animation: 'fxFadeUp .3s ease .5s both, fxOut .3s ease 1.1s forwards' }}>生效中</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-500/70 text-slate-200 text-[10px] font-black" style={an('fxPop', 0.3, 1.8)}>
+                    <i className="fa-solid fa-trash-can mr-1"></i>棄掉【僕人】
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-900/70 border border-emerald-500/60 text-emerald-200 text-[10px] font-black" style={an('fxPop', 0.3, 2.0)}>
+                    <i className="fa-solid fa-forward mr-1"></i>額外回合
+                  </span>
+                </div>
               </div>
             );
           } else if (kind === 'takeone') {
@@ -395,38 +492,51 @@
               </div>
             );
           } else if (kind === 'compare') {
+            // 第一拍：誰 對 誰 打出什麼牌；第二拍（T 秒後）：開始比大小
+            const T = 1.7;
             const loserSide = fx.loserId === undefined ? null : (src && fx.loserId === src.id ? 'L' : 'R');
             const col = (p, side) => {
               const isLoser = loserSide === side;
               const inner = isLoser
-                ? an(side === 'L' ? 'fxKnockL' : 'fxKnockR', 0.5, 1.35, 'ease-out')
-                : an('fxShake', 0.5, 1.35);
+                ? an(side === 'L' ? 'fxKnockL' : 'fxKnockR', 0.5, 1.35 + T, 'ease-out')
+                : an('fxShake', 0.5, 1.35 + T);
               return (
-                <div className="flex flex-col items-center gap-1.5" style={an(side === 'L' ? 'fxClashL' : 'fxClashR', 0.6, 0.5, 'cubic-bezier(.3,1.4,.5,1)')}>
+                <div className="flex flex-col items-center gap-1.5" style={an(side === 'L' ? 'fxClashL' : 'fxClashR', 0.6, 0.5 + T, 'cubic-bezier(.3,1.4,.5,1)')}>
                   <FxChip p={p} />
                   <div style={inner}>
                     <div className="relative w-14 h-[76px]">
-                      <div className="absolute inset-0" style={isLoser ? an('fxFlipOut', 0.2, 1.5, 'ease-in') : undefined}><FxBack cls="w-14 h-[76px]" /></div>
+                      <div className="absolute inset-0" style={isLoser ? an('fxFlipOut', 0.2, 1.5 + T, 'ease-in') : undefined}><FxBack cls="w-14 h-[76px]" /></div>
                       {isLoser && fx.loserCard && (
-                        <div className="absolute inset-0" style={an('fxFlipIn', 0.25, 1.7, 'ease-out')}><FxFace c={fx.loserCard} cls="w-14 h-[76px]" /></div>
+                        <div className="absolute inset-0" style={an('fxFlipIn', 0.25, 1.7 + T, 'ease-out')}><FxFace c={fx.loserCard} cls="w-14 h-[76px]" /></div>
                       )}
-                      {isLoser && stamp(2.0)}
+                      {isLoser && stamp(2.0 + T)}
                     </div>
                   </div>
                 </div>
               );
             };
             body = (
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-1.5" style={an('fxPop', 0.4, 0)}>
-                  <FxFace c={card} cls="w-9 h-[48px]" />
-                  <span className="text-amber-300 font-black text-sm">{fx.mode}</span>
+              <div className="grid place-items-center">
+                <div className="col-start-1 row-start-1 flex flex-col items-center gap-2.5" style={an('fxOut', 0.3, T - 0.3, 'ease-in')}>
+                  <div className="flex items-center justify-center gap-2.5">
+                    <div style={an('fxInL', 0.4, 0)}><FxChip p={src} /></div>
+                    <div style={an('fxPop', 0.4, 0.15)}><FxFace c={card} cls="w-14 h-[76px]" /></div>
+                    <i className="fa-solid fa-arrow-right text-amber-400 text-sm" style={an('fxFadeUp', 0.3, 0.5)}></i>
+                    <div style={an('fxInR', 0.4, 0.6)}><FxChip p={tgt} /></div>
+                  </div>
+                  <div className="text-[11px] font-black text-amber-200" style={an('fxFadeUp', 0.4, 0.95)}>秘密比較手牌・{fx.mode}</div>
                 </div>
-                <div className="relative flex items-center justify-center gap-3">
-                  {col(src, 'L')}
-                  <span className="text-white font-black text-lg" style={an('fxPop', 0.3, 0.3)}>VS</span>
-                  {col(tgt, 'R')}
-                  {fx.tone === 'tie' && stamp(1.5)}
+                <div className="col-start-1 row-start-1 flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-1.5" style={an('fxPop', 0.4, T)}>
+                    <FxFace c={card} cls="w-9 h-[48px]" />
+                    <span className="text-amber-300 font-black text-sm">{fx.mode}</span>
+                  </div>
+                  <div className="relative flex items-center justify-center gap-3">
+                    {col(src, 'L')}
+                    <span className="text-white font-black text-lg" style={an('fxPop', 0.3, 0.3 + T)}>VS</span>
+                    {col(tgt, 'R')}
+                    {fx.tone === 'tie' && stamp(1.5 + T)}
+                  </div>
                 </div>
               </div>
             );
@@ -568,12 +678,7 @@
                 </div>
               );
             } else if (kind === 'grave') {
-              badges = fx.stolen ? (
-                <div className="flex flex-col items-center gap-0.5" style={{ animation: 'fxFlyL 1.0s ease-in 1.4s both' }}>
-                  <div style={an('fxFlipIn', 0.3, 1.0)}><FxFace c={fx.stolen} /></div>
-                  <span className="text-[9px] font-black text-amber-200">奪取</span>
-                </div>
-              ) : null;
+              stampAt = 3.0;
             } else if (kind === 'witch') {
               stampAt = 1.2;
             } else if (kind === 'selfout') {
@@ -587,13 +692,22 @@
             );
             body = (
               <div className="flex flex-col items-center">
-                <div className="flex items-center justify-center gap-2.5">
+                <div className="relative flex items-center justify-center gap-2.5">
+                  {kind === 'grave' && fx.stolen && (
+                    <div ref={slotRef} className="relative w-14 h-[76px] shrink-0">
+                      <div ref={stolenRef} className="absolute inset-0 z-20" style={{ animation: 'fxGraveMove 1.5s ease-in-out .9s both' }}>
+                        <div className="absolute inset-0" style={an('fxFlipOut', 0.2, 1.05, 'ease-in')}><FxBack cls="w-14 h-[76px]" /></div>
+                        <div className="absolute inset-0" style={an('fxFlipIn', 0.25, 1.25, 'ease-out')}><FxFace c={fx.stolen} cls="w-14 h-[76px]" /></div>
+                      </div>
+                      <span className="absolute left-0 right-0 top-full mt-1 text-center text-[9px] font-black text-amber-200" style={an('fxFadeUp', 0.3, 2.4)}>奪取</span>
+                    </div>
+                  )}
                   {srcWrap}
                   <div style={an('fxPop', 0.4, 0.15)}><FxFace c={card} cls="w-14 h-[76px]" /></div>
                   {tgt && tgt !== src && (
                     <>
                       <i className="fa-solid fa-arrow-right text-amber-400 text-sm" style={an('fxFadeUp', 0.3, 0.5)}></i>
-                      <div className="relative" style={an('fxInR', 0.4, 0.6)}>
+                      <div ref={tgtRef} className="relative" style={an('fxInR', 0.4, 0.6)}>
                         <div style={stampTgt && fx.stampText && fx.tone === 'out' ? an('fxShake', 0.5, stampAt + 0.2) : undefined}>
                           <FxChip p={tgt} glow={kind === 'witch' ? 'ring-4 ring-emerald-400/70' : ''} />
                         </div>
@@ -612,12 +726,13 @@
 
           return (
             <div
-              className={`fx-layer absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
-              style={{ '--fx-dur': `${fx.duration / 1000}s` }}
+              className={`${replay ? 'fx-hold' : 'fx-layer'} absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
+              style={replay ? undefined : { '--fx-dur': `${fx.duration / 1000}s` }}
               onClick={isNone ? undefined : onSkip}
             >
               <div ref={bodyRef} className="contents">{body}</div>
-              {!isNone && <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">點一下略過</span>}
+              {replay && <span className="absolute top-1 left-2 z-20 text-[9px] font-black text-amber-300 bg-slate-900/80 border border-amber-500/40 rounded-full px-2 py-0.5 pointer-events-none">回放</span>}
+              {!isNone && <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">{replay ? '點一下離開' : '點一下略過'}</span>}
             </div>
           );
         }
@@ -700,7 +815,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.16 M');
+          const [version] = useState('v0.0.0 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -729,6 +844,7 @@
           const [fx, setFx] = useState(null);          // C 區效果動畫
           const fxTimerRef = useRef(null);
           const fxUntilRef = useRef(0);
+          const [replay, setReplay] = useState(null); // { fx, n }：點紀錄回放的動畫
           const [historyLogs, setHistoryLogs] = useState([]);
           const [witchTargetOwner, setWitchTargetOwner] = useState(null);
 
@@ -786,6 +902,8 @@
             fxUntilRef.current = Date.now() + f.duration;
             fxTimerRef.current = setTimeout(() => setFx(null), f.duration + 60);
           };
+          // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
+          const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
           const skipFx = () => {
             clearTimeout(fxTimerRef.current);
             fxUntilRef.current = 0;
@@ -798,17 +916,16 @@
             setBroadcastResult(`➔ ${resultText}`);
             if (reveal) setBroadcastReveal(reveal);
             if (event) setBroadcastEvent({ type: event, key: `${Date.now()}-${Math.random()}` });
+            // 效果動畫：由動作行與結果行推導（純視覺；解析失敗就不播），並存進紀錄供回放
+            let f = null;
+            if (!gameOverRef.current) {
+              try { f = deriveFx(actionText, resultText, reveal, stateRef.current); } catch (e) { console.warn('fx error', e); }
+            }
             setHistoryLogs(prev => [
-              { id: `${Date.now()}-${Math.random()}`, player: playerName, action: actionText, result: resultText, reveal, event, card: `${actionText} ➔ ${resultText}` },
+              { id: `${Date.now()}-${Math.random()}`, player: playerName, action: actionText, result: resultText, reveal, event, card: `${actionText} ➔ ${resultText}`, fx: f },
               ...prev
             ]);
-            // 效果動畫：由動作行與結果行推導（純視覺；解析失敗就不播）
-            if (!gameOverRef.current) {
-              try {
-                const f = deriveFx(actionText, resultText, reveal, stateRef.current);
-                if (f) startFx(f);
-              } catch (e) { console.warn('fx error', e); }
-            }
+            if (f) startFx(f);
           };
 
           // 暗牌追蹤：某人對某一格「拿一還一」（看過 + 換過）
@@ -935,6 +1052,7 @@
             setPlayedCardArena(null);
             clearTimeout(fxTimerRef.current);
             fxUntilRef.current = 0;
+            setReplay(null);
             setFx(null);
             setWitchTargetOwner(null);
             setIsReturningCenterCard(false);
@@ -1845,8 +1963,15 @@
           const useServant = (pid, servantId) => {
             const p = stateRef.current.players.find(x => x.id === pid);
             setPlayers(prev => prev.map(x => x.id === pid ? { ...x, playedCards: x.playedCards.filter(c => !(c && c.id === servantId)) } : x));
+            // 動畫播放期間先鎖住操作，播完才開始額外回合
+            lockRef.current = true;
+            setActionLocked(true);
             logActionAndResult(`${p.name} 棄掉面前【僕人】`, '立刻進行額外回合！', p.name);
-            proceedToNext(pid);
+            const wait = Math.max(1200, fxUntilRef.current - Date.now() + 300);
+            setTimeout(() => {
+              if (gameOverRef.current) return;
+              proceedToNext(pid);
+            }, wait);
           };
 
           const advanceTurn = () => {
@@ -2154,7 +2279,7 @@
                             return (
                               <div key={p.id} className={`flex items-center justify-between gap-1 rounded-lg border px-1.5 py-1 ${isWin ? 'border-amber-400/70 bg-amber-500/10' : 'border-slate-700 bg-slate-900/70'}`}>
                                 <span className="flex items-center gap-1 shrink-0">
-                                  <span>{p.emoji}</span>
+                                  <Avatar p={p} size="w-5 h-5" />
                                   <span className={`truncate ${p.id === 0 ? 'text-sky-300 font-black' : 'text-slate-200 font-bold'}`}>{p.name}</span>
                                   {isWin && <span>🏆</span>}
                                   {out && <span className="text-[9px] font-black text-rose-300 border border-rose-500/50 rounded px-1">出局</span>}
@@ -2214,7 +2339,8 @@
                         等待玩家行動...
                       </div>
                     )}
-                    {fx && !(gameOver && victoryDismissed) && <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} />}
+                    {replay && replay.fx && <FxOverlay key={`r${replay.n}`} fx={replay.fx} onSkip={() => setReplay(null)} replay={{}} />}
+                    {!replay && fx && !(gameOver && victoryDismissed) && <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} />}
                   </div>
                 </main>
 
@@ -2504,9 +2630,9 @@
                             ? 'border-emerald-400 bg-emerald-950/30 shadow-[0_0_12px_rgba(52,211,153,0.5)]'
                             : 'border-purple-400 bg-slate-800/60';
                         return (
-                          <div key={log.id} className={`border-l-2 p-2 rounded flex flex-col ${lit}`}>
+                          <div key={log.id} onClick={log.fx ? () => playLogFx(log.fx) : undefined} className={`border-l-2 p-2 rounded flex flex-col ${lit} ${log.fx ? 'cursor-pointer active:brightness-125' : ''}`}>
                             <div className="flex items-center justify-between">
-                              <div className="text-[10px] text-purple-300 font-bold">{log.player}</div>
+                              <div className="text-[10px] text-purple-300 font-bold flex items-center gap-2">{log.player}{log.fx && <span className="text-[9px] text-sky-300 font-black"><i className="fa-solid fa-play mr-0.5"></i>點擊看動畫</span>}</div>
                               {log.event && (
                                 <span className={`flex items-center text-[9px] font-black ${log.event === 'out' ? 'text-rose-300' : 'text-emerald-300'}`}>
                                   <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 animate-pulse ${log.event === 'out' ? 'bg-rose-400' : 'bg-emerald-400'}`}></span>{log.event === 'out' ? '出局' : '復活'}
@@ -2698,6 +2824,16 @@
         }
 
         // 互動對話框組件
+        function WatchCard({ c, icon, selected, onClick }) {
+          return (
+            <button type="button" onClick={onClick} className={`relative rounded-lg border-2 px-1.5 pt-1.5 pb-1 bg-slate-800 flex flex-col items-center gap-0.5 transition ${selected ? 'border-amber-400 ring-2 ring-amber-400/70 -translate-y-0.5' : 'border-slate-600'}`}>
+              <span className="absolute left-1.5 top-1 font-mono font-black text-amber-300 text-sm leading-none">{c.value}</span>
+              <i className={`fa-solid ${icon || c.icon || 'fa-circle'} text-amber-400 text-lg mt-3`}></i>
+              <span className="text-[10px] font-black text-amber-100 leading-tight">{c.title}</span>
+              <span className="text-[8px] text-slate-400 leading-tight text-center">{c.desc}</span>
+            </button>
+          );
+        }
         function PlayerPicker({ label, options, value, onChange }) {
           return (
             <div>
@@ -2708,7 +2844,7 @@
                     const sel = value === String(p.id);
                     return (
                       <button type="button" key={p.id} onClick={() => onChange(String(p.id))} className={`flex flex-col items-center rounded-lg border py-1.5 active:scale-95 ${sel ? 'border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/60' : 'border-slate-700 bg-slate-800'}`}>
-                        <span className={`w-9 h-9 rounded-full bg-gradient-to-br ${p.gradient} flex items-center justify-center text-lg`}>{p.emoji}</span>
+                        <Avatar p={p} size="w-9 h-9" />
                         <span className={`text-[10px] font-bold mt-0.5 truncate max-w-full px-0.5 ${p.id === 0 ? 'text-sky-300' : 'text-slate-200'}`}>{p.name}</span>
                       </button>
                     );
@@ -2783,12 +2919,20 @@
                   <div className="space-y-3 text-xs">
                     {/* 守夜人卡牌選擇 */}
                     {modal.type === 'NIGHT_WATCHMAN' ? (
-                      <div>
-                        <label className="block text-slate-400 mb-1">從手牌與中央暗牌中選擇 1 張保留：</label>
-                        <select value={selectedKeepCard} onChange={e => setSelectedKeepCard(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
-                          <option value="">-- 請選擇保留卡牌 --</option>
-                          {watchmanOptions.map(c => <option key={c.id} value={c.id}>({c.value}) {c.title}</option>)}
-                        </select>
+                      <div className="space-y-2">
+                        <div className="text-slate-400">中央暗牌（3 張，完整翻開）：</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {centerCards.filter(Boolean).map(c => (
+                            <WatchCard key={c.id} c={c} icon={(allCards.find(x => x.title === c.title) || {}).icon} selected={selectedKeepCard === c.id} onClick={() => setSelectedKeepCard(c.id)} />
+                          ))}
+                        </div>
+                        <div className="text-slate-400">你現時的手牌：</div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {watchmanHand.filter(Boolean).map(c => (
+                            <WatchCard key={c.id} c={c} icon={(allCards.find(x => x.title === c.title) || {}).icon} selected={selectedKeepCard === c.id} onClick={() => setSelectedKeepCard(c.id)} />
+                          ))}
+                        </div>
+                        <div className="text-[10px] text-slate-500">點選 1 張保留，其餘 3 張面朝下洗勻放回中央。</div>
                       </div>
                     ) : modal.type === 'GRAVEDIGGER' ? (
                       <>
