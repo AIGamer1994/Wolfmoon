@@ -126,7 +126,7 @@
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             touch-action: pan-y;
-            max-height: 14rem;
+            max-height: none;
         }
     </style>
 </head>
@@ -207,6 +207,15 @@
           '市長': 'selfout', '狼人': 'selfout',
         };
         const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 5000, swap: 2700, drunk: 3000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200 };
+        // 被動牌打出時「沒有任何效果（原因）」的原因（動態廣播、行動紀錄、置於面前動畫共用）
+        const PASSIVE_WHY = {
+          '乞丐之王': '結算時才發動',
+          '間諜': '手握此牌被猜錯時才發動',
+          '科學怪人': '手握此牌結算時才發動',
+          '商人': '結算時才發動',
+          '煉金術士': '被淘汰才會發動',
+          '陰謀家': '手握此牌被淘汰時才會發動',
+        };
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
         const FX_TOTAL_BY = { compare: 5500, grave: 4600, place: 4000, servant: 4000 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
@@ -266,8 +275,7 @@
             const rm = /[（(]([^）)]+)[）)]/.exec(res);
             fx.lasting = ['僕人', '商人', '煉金術士'].includes(meta.title);
             if (meta.title === '僕人') fx.reason = '待命：回合結束時可棄掉，換額外回合';
-            else if (meta.title === '煉金術士') fx.reason = '被淘汰才會發動';
-            else if (meta.title === '陰謀家') fx.reason = '手握此牌被淘汰時才會發動';
+            else if (PASSIVE_WHY[meta.title]) fx.reason = PASSIVE_WHY[meta.title];
             else if (meta.type === 'PASSIVE') fx.reason = '被動牌・結算時才啟動';
             else { fx.noEffect = true; fx.reason = rm ? rm[1] : res.replace(/^[➔\s]+/, '').replace(/^(沒有任何效果|無任何效果)[：:\s]*/, '').slice(0, 30); }
           }
@@ -817,7 +825,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.1 M');
+          const [version] = useState('v0.0.2 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -906,6 +914,13 @@
           };
           // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
           const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
+          // 回放播完（或點一下離開）➔ 回到行動紀錄彈窗
+          const closeReplay = () => { setReplay(null); setIsHistoryModalOpen(true); };
+          useEffect(() => {
+            if (!replay || !replay.fx) return;
+            const t = setTimeout(() => closeReplay(), (replay.fx.duration || 4000) + 500);
+            return () => clearTimeout(t);
+          }, [replay]);
           const skipFx = () => {
             clearTimeout(fxTimerRef.current);
             fxUntilRef.current = 0;
@@ -1608,7 +1623,7 @@
               }
 
               default: {
-                const passiveWhy = card.title === '煉金術士' ? '被淘汰才會發動' : (card.title === '陰謀家' ? '手握此牌被淘汰時才會發動' : '');
+                const passiveWhy = PASSIVE_WHY[card.title] || '';
                 logActionAndResult(`${source.name} 打出了(${card.value})【${card.title}】`, passiveWhy ? `沒有任何效果（${passiveWhy}）` : '無任何效果', source.name);
                 advanceTurn();
                 break;
@@ -2356,7 +2371,7 @@
                         等待玩家行動...
                       </div>
                     )}
-                    {replay && replay.fx && <FxOverlay key={`r${replay.n}`} fx={replay.fx} onSkip={() => setReplay(null)} replay={{}} />}
+                    {replay && replay.fx && <FxOverlay key={`r${replay.n}`} fx={replay.fx} onSkip={closeReplay} replay={{}} />}
                     {!replay && fx && !(gameOver && victoryDismissed) && <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} />}
                   </div>
                 </main>
@@ -2628,9 +2643,9 @@
 
               {/* 彈窗 2：歷史紀錄 */}
               {isHistoryModalOpen && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <div className="bg-slate-900 border border-purple-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
-                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                <div className="fixed inset-x-0 top-0 h-[100dvh] bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+                  <div className="bg-slate-900 border border-purple-500/50 rounded-2xl w-full max-w-xs h-full flex flex-col p-4 shadow-2xl relative">
+                    <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3 shrink-0">
                       <div className="flex items-center space-x-2">
                         <i className="fa-solid fa-clock-rotate-left text-purple-400"></i>
                         <h3 className="text-sm font-bold text-purple-300">行動紀錄</h3>
@@ -2639,7 +2654,7 @@
                         <i className="fa-solid fa-xmark"></i>
                       </button>
                     </div>
-                    <div className="history-scroll space-y-2 pr-1 text-xs scrollbar-none">
+                    <div className="history-scroll flex-1 min-h-0 space-y-2 pr-1 text-xs scrollbar-none">
                       {historyLogs.length > 0 ? historyLogs.map(log => {
                         const lit = log.event === 'out'
                           ? 'border-rose-500 bg-rose-950/30 shadow-[0_0_12px_rgba(244,63,94,0.5)]'
@@ -2665,7 +2680,7 @@
                         <div className="text-center text-slate-500 py-4">尚無紀錄</div>
                       )}
                     </div>
-                    <button onClick={() => setIsHistoryModalOpen(false)} className="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs py-2 rounded-xl border border-slate-700 transition">
+                    <button onClick={() => setIsHistoryModalOpen(false)} className="w-full mt-3 shrink-0 bg-slate-800 hover:bg-slate-700 text-purple-300 text-xs py-2 rounded-xl border border-slate-700 transition">
                       關閉
                     </button>
                   </div>
