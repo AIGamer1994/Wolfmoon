@@ -113,6 +113,30 @@
 
         @keyframes fxMoonRise { 0% { transform: translateY(150px) scale(.8); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
         @keyframes fxRedPulse { 0% { opacity: .35; } 100% { opacity: 1; } }
+        /* 狼月降臨：狼人撲咬演出 */
+        @keyframes fxDraw { 0% { stroke-dashoffset: 100; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+        @keyframes fxClawFade { 0% { opacity: 1; } 100% { opacity: .25; } }
+        @keyframes fxFlashW { 0% { opacity: .6; } 100% { opacity: 0; } }
+        @keyframes fxEyeApproach {
+          0% { opacity: 0; transform: scale(.45); }
+          14% { opacity: 1; transform: scale(.5); }
+          55% { opacity: 1; transform: scale(.7); }
+          100% { opacity: 1; transform: scale(3.4); }
+        }
+        @keyframes fxBlink { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.08); } }
+        @keyframes fxJawOpenT { 0% { transform: translateY(-110%); } 100% { transform: translateY(-60%); } }
+        @keyframes fxJawOpenB { 0% { transform: translateY(110%); } 100% { transform: translateY(60%); } }
+        @keyframes fxJawSlamT { 0% { transform: translateY(-60%); } 100% { transform: translateY(0); } }
+        @keyframes fxJawSlamB { 0% { transform: translateY(60%); } 100% { transform: translateY(0); } }
+        @keyframes fxFlood { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+        /* 玩家抽牌：牌從上方飛入 D 區、翻面、短暫放大後歸位 */
+        @keyframes fxDrawFly {
+          0% { opacity: 0; transform: translate(var(--sx, 0px), var(--sy, -260px)) scale(.4) rotate(12deg); }
+          14% { opacity: 1; }
+          100% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0deg); }
+        }
+        @keyframes fxDrawPop { 0% { transform: scale(1); } 40% { transform: scale(1.14); } 75% { transform: scale(1.14); } 100% { transform: scale(1); } }
+        @keyframes fxDrawGlow { 0%, 100% { box-shadow: 0 0 0 rgba(251,191,36,0); } 40%, 75% { box-shadow: 0 0 22px 4px rgba(251,191,36,.75); } }
         @keyframes fxBarGrow { 0% { width: 0; } 100% { width: var(--w); } }
         @keyframes fxWinGlow { 0% { box-shadow: 0 0 0 0 rgba(251,191,36,0); } 100% { box-shadow: 0 0 14px 2px rgba(251,191,36,.85); border-color: #fbbf24; background-color: rgba(120,53,15,.55); } }
         @keyframes fxDim { 0% { opacity: 1; } 100% { opacity: .38; } }
@@ -242,15 +266,21 @@
             const mm = /(\d)\/3/.exec(String(resultText || ''));
             const ph = mm ? Math.min(3, Math.max(1, parseInt(mm[1], 10))) : 1;
             const msrc = st && st.players ? (st.players.find(p => p.name === mn[1]) || null) : null;
-            const dur = ph >= 3 ? 4200 : 3200;
-            // 第 3 張月亮：場上有人手握狼人 ➔ 月光中出現狼的剪影；狼人已被淘汰（面前有狼人牌）或無人手握 ➔ 沒有狼人
-            let wolf = 'none';
+            // 第 3 張月亮：場上有人手握狼人 ➔ 月光中出現狼的剪影，之後播狼人撲咬鏡頭演出（較長）；狼人已被淘汰（面前有狼人牌）或無人手握 ➔ 沒有狼人
+            let wolf = 'none', wolfWinner = null, traitorWinner = null;
             if (ph >= 3 && st && st.players) {
-              const held = st.players.some(p => p.status === '存活' && ((st.playerHands || {})[p.id] || []).some(c => c && c.title === '狼人'));
+              st.players.filter(p => p.status === '存活').forEach(p => {
+                const hand = ((st.playerHands || {})[p.id] || []).filter(Boolean);
+                if (hand.some(c => c.title === '狼人')) wolfWinner = p;
+                if (hand.some(c => c.title === '叛徒')) traitorWinner = p;
+              });
+              if (traitorWinner && wolfWinner && traitorWinner.id === wolfWinner.id) traitorWinner = null;
               const outW = st.players.some(p => (p.playedCards || []).some(c => c && c.title === '狼人'));
-              wolf = held ? 'held' : (outW ? 'out' : 'none');
+              wolf = wolfWinner ? 'held' : (outW ? 'out' : 'none');
+              if (!wolfWinner) traitorWinner = null;
             }
-            return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: mn[2], value: '🌙', icon: 'fa-moon' }, src: msrc, tgt: null, tone: 'ok', phase: ph, wolf, baseDur: dur, duration: dur };
+            const dur = ph >= 3 ? (wolf === 'held' ? 9300 : 4200) : 3200;
+            return { key: `${Date.now()}-${Math.random()}`, kind: 'moon', card: { title: mn[2], value: '🌙', icon: 'fa-moon' }, src: msrc, tgt: null, tone: 'ok', phase: ph, wolf, wolfWinner, traitorWinner, baseDur: dur, duration: dur };
           }
           const sv = /^(\S+) 棄掉面前【僕人】/.exec(String(actionText || ''));
           if (sv && st && st.players) {
@@ -540,45 +570,71 @@
               </div>
             );
           } else if (kind === 'moon') {
-            // 月亮升起：第 1 張彎月、第 2 張半月、第 3 張全月（紅月，狼月降臨）
+            // 月亮升起：第 1 張彎月、第 2 張半月、第 3 張全月（天空一開始是黑的，月亮升起後才轉紅，狼月降臨）
             const ph = fx.phase || 1;
             const red = ph >= 3;
+            const held = red && fx.wolf === 'held';
             const mnames = ['孤狼月亮', '嘯狼月亮', '狼人月亮'];
-            body = (
-              <div className="relative w-[270px] h-[300px] rounded-xl overflow-hidden border border-indigo-400/30" style={{ background: red ? 'linear-gradient(#1a0508,#4a0d14 70%,#2a0a0e)' : 'linear-gradient(#050816,#12183a 70%,#1e2350)' }}>
+            const moonSvg = (isRed, gid) => (
+              <svg width="92" height="92" viewBox="0 0 100 100" style={{ filter: isRed ? 'drop-shadow(0 0 18px rgba(248,113,113,.9))' : 'drop-shadow(0 0 14px rgba(253,230,138,.7))' }}>
+                <defs>
+                  <radialGradient id={`fxMnG${gid}`} cx="40%" cy="35%">
+                    <stop offset="0" stopColor={isRed ? '#fee2e2' : '#fffbeb'} />
+                    <stop offset="1" stopColor={isRed ? '#f87171' : '#fcd34d'} />
+                  </radialGradient>
+                  <mask id={`fxMnMask${gid}`}><rect width="100" height="100" fill="white" /><circle cx="68" cy="42" r="38" fill="black" /></mask>
+                </defs>
+                {ph === 1 && <circle cx="50" cy="50" r="42" fill={`url(#fxMnG${gid})`} mask={`url(#fxMnMask${gid})`} />}
+                {ph === 2 && (<>
+                  <circle cx="50" cy="50" r="42" fill="#fde68a" opacity=".12" />
+                  <path d="M50 8 A42 42 0 0 0 50 92 Z" fill={`url(#fxMnG${gid})`} />
+                </>)}
+                {ph >= 3 && (<>
+                  <circle cx="50" cy="50" r="42" fill={`url(#fxMnG${gid})`} />
+                  <circle cx="38" cy="38" r="7" fill={isRed ? '#7f1d1d' : '#92400e'} opacity=".14" />
+                  <circle cx="62" cy="58" r="9" fill={isRed ? '#7f1d1d' : '#92400e'} opacity=".12" />
+                  <circle cx="44" cy="66" r="5" fill={isRed ? '#7f1d1d' : '#92400e'} opacity=".12" />
+                </>)}
+              </svg>
+            );
+            const teeth = [[3, 12, 14], [17, 16, 34], [33, 13, 16], [47, 14, 18], [61, 13, 16], [77, 16, 34], [91, 12, 14]];
+            const jawSvg = (flip) => (
+              <svg viewBox="0 0 100 60" preserveAspectRatio="none" className="w-full h-full" style={{ transform: flip ? 'scaleY(-1)' : undefined }}>
+                <rect x="0" y="0" width="100" height="24" fill="#3b0a0a" />
+                <rect x="0" y="0" width="100" height="9" fill="#1c0505" />
+                <rect x="0" y="16" width="100" height="8" fill="#7f1d1d" />
+                {teeth.map(([x, w, h], i) => <polygon key={i} points={`${x},24 ${x + w},24 ${x + w / 2},${24 + h}`} fill="#f5f5f4" stroke="#a8a29e" strokeWidth=".4" />)}
+              </svg>
+            );
+            const clawsA = ['M 8 -5 Q 40 40 62 108', 'M 22 -8 Q 54 36 76 106', 'M 36 -10 Q 66 34 90 104'];
+            const clawsB = ['M 92 -5 Q 60 40 38 108', 'M 78 -8 Q 46 36 24 106', 'M 64 -10 Q 34 34 10 104'];
+            const clawSet = (paths, t0) => paths.map((d, i) => (
+              <React.Fragment key={t0 + '-' + i}>
+                <path d={d} pathLength="100" fill="none" stroke="#ef4444" strokeWidth="9" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".5" style={{ strokeDasharray: 100, strokeDashoffset: 100, animation: `fxDraw .22s ease-out ${t0 + i * 0.07}s both` }} />
+                <path d={d} pathLength="100" fill="none" stroke="#fecaca" strokeWidth="4" strokeLinecap="round" vectorEffect="non-scaling-stroke" style={{ strokeDasharray: 100, strokeDashoffset: 100, animation: `fxDraw .22s ease-out ${t0 + i * 0.07}s both` }} />
+              </React.Fragment>
+            ));
+            const wp = fx.wolfWinner, tp = fx.traitorWinner;
+            body = (<>
+              <div className="relative w-[270px] h-[300px] rounded-xl overflow-hidden border border-indigo-400/30" style={{ background: red ? 'linear-gradient(#000,#04050b 70%,#0a0b14)' : 'linear-gradient(#050816,#12183a 70%,#1e2350)' }}>
                 {[[12, 10], [30, 28], [55, 8], [78, 22], [90, 12], [18, 48], [85, 50], [45, 36], [68, 40]].map(([x, y], i) => (
                   <span key={i} className="absolute w-[2px] h-[2px] rounded-full bg-white" style={{ left: `${x}%`, top: `${y}%`, ...an('fxFadeUp', 0.6, 0.2 + i * 0.15) }}></span>
                 ))}
-                {red && <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 55%, rgba(239,68,68,.35), transparent 65%)', animation: 'fxRedPulse 1.2s ease-in-out 1.8s infinite alternate' }}></div>}
+                {red && <div className="absolute inset-0" style={{ background: 'linear-gradient(#1a0508,#4a0d14 70%,#2a0a0e)', animation: 'fxIn 1.2s ease 2.3s both' }}></div>}
+                {red && <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 55%, rgba(239,68,68,.35), transparent 65%)', animation: 'fxIn .8s ease 2.6s both, fxRedPulse 1.2s ease-in-out 3.4s infinite alternate' }}></div>}
                 <div className="absolute left-1/2 -ml-[46px] bottom-[70px]" style={an('fxMoonRise', 2.2, 0.2, 'cubic-bezier(.2,.8,.3,1)')}>
-                  <svg width="92" height="92" viewBox="0 0 100 100" style={{ filter: red ? 'drop-shadow(0 0 18px rgba(248,113,113,.9))' : 'drop-shadow(0 0 14px rgba(253,230,138,.7))' }}>
-                    <defs>
-                      <radialGradient id="fxMnG" cx="40%" cy="35%">
-                        <stop offset="0" stopColor={red ? '#fee2e2' : '#fffbeb'} />
-                        <stop offset="1" stopColor={red ? '#f87171' : '#fcd34d'} />
-                      </radialGradient>
-                      <mask id="fxMnMask"><rect width="100" height="100" fill="white" /><circle cx="68" cy="42" r="38" fill="black" /></mask>
-                    </defs>
-                    {ph === 1 && <circle cx="50" cy="50" r="42" fill="url(#fxMnG)" mask="url(#fxMnMask)" />}
-                    {ph === 2 && (<>
-                      <circle cx="50" cy="50" r="42" fill="#fde68a" opacity=".12" />
-                      <path d="M50 8 A42 42 0 0 0 50 92 Z" fill="url(#fxMnG)" />
-                    </>)}
-                    {ph >= 3 && (<>
-                      <circle cx="50" cy="50" r="42" fill="url(#fxMnG)" />
-                      <circle cx="38" cy="38" r="7" fill="#7f1d1d" opacity=".14" />
-                      <circle cx="62" cy="58" r="9" fill="#7f1d1d" opacity=".12" />
-                      <circle cx="44" cy="66" r="5" fill="#7f1d1d" opacity=".12" />
-                    </>)}
-                  </svg>
+                  <div className="relative w-[92px] h-[92px]">
+                    {moonSvg(false, 'a')}
+                    {red && <div className="absolute inset-0" style={{ animation: 'fxIn .9s ease 2.3s both' }}>{moonSvg(true, 'b')}</div>}
+                  </div>
                 </div>
                 <svg className="absolute bottom-0 left-0 w-full h-[84px]" viewBox="0 0 270 84" preserveAspectRatio="none">
                   <path d="M0 40 Q40 14 80 36 T150 30 T220 38 T270 24 L270 84 L0 84 Z" fill="#05060f" />
                   <path d="M0 62 Q60 44 120 58 T270 52 L270 84 L0 84 Z" fill="#02030a" />
                 </svg>
-                {red && (fx.wolf === 'held'
-                  ? <span className="absolute left-1/2 -ml-[22px] bottom-[84px] text-[44px] leading-none" style={{ filter: 'brightness(0)', ...an('fxPop', 0.5, 2.0) }}>🐺</span>
-                  : <span className="absolute left-1/2 -ml-[22px] bottom-[84px] w-[44px] h-[44px] flex items-center justify-center" style={an('fxPop', 0.5, 2.0)}>
+                {red && (held
+                  ? <span className="absolute left-1/2 -ml-[22px] bottom-[84px] text-[44px] leading-none" style={{ filter: 'brightness(0)', ...an('fxPop', 0.5, 3.1) }}>🐺</span>
+                  : <span className="absolute left-1/2 -ml-[22px] bottom-[84px] w-[44px] h-[44px] flex items-center justify-center" style={an('fxPop', 0.5, 3.1)}>
                       <span className="text-[44px] leading-none opacity-25" style={{ filter: 'brightness(0)' }}>🐺</span>
                       <i className="fa-solid fa-ban absolute text-slate-300 text-3xl"></i>
                     </span>)}
@@ -586,12 +642,52 @@
                   <div className="text-[10px] text-slate-300 font-bold">{src ? src.name : ''} 翻開了</div>
                   <div className={`text-sm font-black tracking-widest ${red ? 'text-rose-300' : 'text-amber-200'}`}>{mnames[ph - 1] || card.title}</div>
                 </div>
-                <div className="absolute bottom-2 inset-x-0 flex flex-col items-center gap-0.5" style={an('fxPop', 0.4, 1.4)}>
+                <div className="absolute bottom-2 inset-x-0 flex flex-col items-center gap-0.5" style={an('fxPop', 0.4, red ? 3.0 : 1.4)}>
                   <div className="flex gap-1.5">{[1, 2, 3].map(i => <i key={i} className={`fa-solid fa-moon text-sm ${i <= ph ? (red ? 'text-rose-300' : 'text-amber-300') : 'text-slate-600'}`}></i>)}</div>
                   <div className={`text-[10px] font-black ${red ? 'text-rose-200' : 'text-slate-200'}`}>月亮 {ph}/3{red ? (fx.wolf === 'held' ? '・狼月降臨' : (fx.wolf === 'out' ? '・狼人已被淘汰，無人掌控狼月' : '・無人手握狼人')) : ''}</div>
                 </div>
               </div>
-            );
+              {held && (
+                <div className="absolute inset-0 z-40 rounded-lg overflow-hidden bg-black pointer-events-none" style={{ animation: 'fxIn .5s linear 3.7s both' }}>
+                  <div className="absolute inset-0" style={{ animation: 'fxShake .4s linear 4.5s both, fxShake .4s linear 5.0s both, fxShake .45s linear 7.7s both' }}>
+                    {/* 第一幕：利爪抓過鏡頭（兩次） */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none" style={{ filter: 'drop-shadow(0 0 6px #ef4444)', animation: 'fxClawFade .6s ease 5.8s both' }}>
+                      {clawSet(clawsA, 4.4)}
+                      {clawSet(clawsB, 4.95)}
+                    </svg>
+                    <div className="absolute inset-0 bg-white" style={{ animation: 'fxFlashW .25s ease-out 4.45s both' }}></div>
+                    <div className="absolute inset-0 bg-white" style={{ animation: 'fxFlashW .25s ease-out 5.0s both' }}></div>
+                    {/* 第二幕：黑暗中亮起紅眼，慢慢逼近 */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex gap-5" style={{ animation: 'fxEyeApproach 1.9s ease-in 5.7s both, fxOut .1s linear 7.6s forwards' }}>
+                        {[14, -14].map((rot, i) => (
+                          <div key={i} style={{ transform: `rotate(${rot}deg)` }}>
+                            <div className="relative w-[34px] h-[16px] rounded-[100%] overflow-hidden" style={{ background: 'radial-gradient(circle, #fecaca 0%, #ef4444 45%, #7f1d1d 100%)', boxShadow: '0 0 14px 4px rgba(239,68,68,.85)', animation: 'fxBlink .25s ease 6.6s both' }}>
+                              <span className="absolute left-1/2 top-0 w-[4px] h-full -ml-[2px] bg-black rounded"></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* 第三幕：一口咬向鏡頭 */}
+                    <div className="absolute inset-0" style={{ animation: 'fxOut .5s linear 8.2s forwards' }}>
+                      <div className="absolute inset-x-0 top-0 h-[58%]" style={{ animation: 'fxJawOpenT .5s ease-out 7.0s both, fxJawSlamT .16s cubic-bezier(.6,0,1,.6) 7.55s forwards' }}>{jawSvg(false)}</div>
+                      <div className="absolute inset-x-0 bottom-0 h-[58%]" style={{ animation: 'fxJawOpenB .5s ease-out 7.0s both, fxJawSlamB .16s cubic-bezier(.6,0,1,.6) 7.55s forwards' }}>{jawSvg(true)}</div>
+                    </div>
+                    <div className="absolute inset-0 bg-white" style={{ animation: 'fxFlashW .2s ease-out 7.7s both' }}></div>
+                    <div className="absolute inset-0 bg-red-700" style={{ animation: 'fxFlood .9s ease-out 7.7s both' }}></div>
+                  </div>
+                  <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(127,29,29,.55), #000 75%)', animation: 'fxIn .6s ease 8.3s both' }}></div>
+                  {/* 結尾：標出獲勝者 */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2" style={an('fxPop', 0.5, 8.5)}>
+                    <div className="text-lg font-black tracking-[0.3em] text-rose-300" style={{ textShadow: '0 0 14px rgba(239,68,68,.9)' }}>狼月降臨</div>
+                    {wp && <FxChip p={wp} size="w-14 h-14 text-2xl" glow="ring-4 ring-rose-500/80" />}
+                    <div className="text-sm font-black text-rose-200">🐺 {wp ? wp.name : '狼人'} 獲勝</div>
+                    {tp && <div className="text-[11px] font-black text-fuchsia-300">叛徒【{tp.name}】共同獲勝</div>}
+                  </div>
+                </div>
+              )}
+            </>);
           } else if (kind === 'score') {
             // 牌庫耗盡：由低到高逐一翻牌算點數，最後亮出勝者
             const tWin = fx.tWin;
@@ -909,12 +1005,12 @@
               onClick={isNone ? undefined : onSkip}
             >
               <div ref={bodyRef} className="contents">{body}</div>
-              {replay && <span className="absolute top-1 left-2 z-20 text-[9px] font-black text-amber-300 bg-slate-900/80 border border-amber-500/40 rounded-full px-2 py-0.5 pointer-events-none">回放</span>}
+              {replay && <span className="absolute top-1 left-2 z-50 text-[9px] font-black text-amber-300 bg-slate-900/80 border border-amber-500/40 rounded-full px-2 py-0.5 pointer-events-none">回放</span>}
               {!isNone && (replay
-                ? <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">點一下離開</span>
+                ? <span className="absolute bottom-1 right-2 z-50 text-[8px] text-slate-500 pointer-events-none">點一下離開</span>
                 : (<>
-                    <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none" style={{ animation: `fxOut .2s linear ${fx.duration / 1000}s forwards` }}>點一下略過</span>
-                    <span className="absolute bottom-1 inset-x-0 text-center pointer-events-none" style={{ animation: `fxIn .3s linear ${fx.duration / 1000}s both` }}>
+                    <span className="absolute bottom-1 right-2 z-50 text-[8px] text-slate-500 pointer-events-none" style={{ animation: `fxOut .2s linear ${fx.duration / 1000}s forwards` }}>點一下略過</span>
+                    <span className="absolute bottom-1 inset-x-0 z-50 text-center pointer-events-none" style={{ animation: `fxIn .3s linear ${fx.duration / 1000}s both` }}>
                       <span className="animate-pulse inline-block text-[10px] font-black text-amber-300 bg-slate-950/80 border border-amber-500/50 rounded-full px-2.5 py-0.5">👆 點一下繼續</span>
                     </span>
                   </>))}
@@ -1000,7 +1096,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.11 M');
+          const [version] = useState('v0.0.12 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -1063,6 +1159,21 @@
           const speedRef = useRef(1);
           const slow = () => 1 / speedRef.current;
           const changeSpeed = (v) => { const nv = speedRef.current === v ? 1 : v; speedRef.current = nv; setSpeed(nv); };
+          // 玩家抽牌小動畫（D 區）：牌背從上方飛入 ➔ 翻面 ➔ 短暫放大 ➔ 歸位成手牌。純視覺，不鎖操作；點手牌或拖曳可立即略過
+          const [drawAnim, setDrawAnim] = useState(null);
+          const drawAnimTimerRef = useRef(null);
+          const clearDrawAnim = () => {
+            if (drawAnimTimerRef.current) { clearTimeout(drawAnimTimerRef.current); drawAnimTimerRef.current = null; }
+            setDrawAnim(null);
+          };
+          // from：'deck'＝從牌庫（右上）飛來；'center'＝從中央暗牌飛來。handCount：抽完後的手牌張數（2 張時新牌在右邊）
+          const playDrawAnim = (card, from = 'deck', handCount = 2) => {
+            if (!card) return;
+            if (drawAnimTimerRef.current) clearTimeout(drawAnimTimerRef.current);
+            const k = slow();
+            setDrawAnim({ key: `${Date.now()}-${Math.random()}`, card, from, toX: handCount >= 2 ? 71 : 0, k });
+            drawAnimTimerRef.current = setTimeout(() => { drawAnimTimerRef.current = null; setDrawAnim(null); }, Math.round(1450 * k) + 50);
+          };
           const pausedRef = useRef(false);
           const pendingAiRef = useRef(false);
           const aiRunRef = useRef(0);
@@ -1577,6 +1688,7 @@
             stateRef.current.deck = tempDeck;
             setDeck(tempDeck);
             if (finalDrawnCard && playerId === 0) {
+              playDrawAnim(finalDrawnCard, 'deck', 1);
               // 牌效造成的抽牌（女巫復活、賞金獵人重抽、煉金術士復活）：僅記錄自己抽到的牌
               const msg = `你 抽到(${finalDrawnCard.value})【${finalDrawnCard.title}】`;
               setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '你', card: msg }, ...prev]);
@@ -1642,6 +1754,7 @@
             const result = drawTurnCard(0);
             if (result.card) {
               setPlayerHands(prev => ({ ...prev, 0: [...currentHand, result.card] }));
+              playDrawAnim(result.card, 'deck', 2);
               logActionAndResult('你 執行【抽一打一】', `抽到(${result.card.value})【${result.card.title}】`, '你');
             } else if (result.moon) {
               // 月亮牌已打出：仍只有 1 張手牌，可再選「抽一打一」或「拿一還一」
@@ -1679,6 +1792,7 @@
             newCenter[slot] = null; // 該格暫時空出，放回的牌會回到同一格
             setCenterCards(newCenter);
             setPlayerHands(prev => ({ ...prev, 0: [...currentHand, taken] }));
+            playDrawAnim(taken, 'center', 2);
             setIsReturningCenterCard(true);
             setSelectedHandCard(null);
             takenCardRef.current = taken;
@@ -1713,6 +1827,7 @@
             return x >= r.left - 8 && x <= r.right + 8 && y >= r.top - 8 && y <= r.bottom + 8;
           };
           const handleHandPointerDown = (e, card) => {
+            if (drawAnim) clearDrawAnim();
             if (e.pointerType === 'mouse' && e.button !== 0) return;
             dragRef.current = { cardId: card.id, startX: e.clientX, startY: e.clientY, moved: false, pointerId: e.pointerId };
             try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
@@ -2492,7 +2607,7 @@
 
                   {/* 場上卡牌展示 */}
                   <div className="w-full flex-1 flex items-center justify-center relative z-10">
-                    {/* C區左上角：月亮進度；右上角：暗牌 */}
+                    {/* C區左上角：月亮進度；右上角（由左至右）：備用牌、暗牌、牌庫 */}
                     <div className="absolute left-0 top-0 z-20 flex flex-col space-y-1">
                       <div className="flex items-center space-x-1 bg-slate-900/90 border border-amber-500/40 px-2 py-0.5 rounded-full text-[9.5px] shadow">
                         <i className="fa-solid fa-moon text-amber-400"></i>
@@ -2501,7 +2616,11 @@
                       </div>
                       
                     </div>
-                    <div className="absolute right-0 top-0 z-20 flex flex-col items-end space-y-1">
+                    <div className="absolute right-0 top-0 z-20 flex flex-row items-center space-x-1">
+                      <div className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-cyan-500/40 px-2 rounded-full text-[9.5px] shadow">
+                        <i className="fa-solid fa-box-archive text-cyan-400"></i>
+                        <span className="font-bold text-cyan-300">備用牌 <span className="font-mono text-cyan-400">{reserveCards.filter(Boolean).length}</span></span>
+                      </div>
                       <button
                         onClick={() => { setCenterPickMode(false); setIsCenterCardsModalOpen(true); }}
                         className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
@@ -2516,10 +2635,6 @@
                         <i className="fa-solid fa-layer-group text-amber-400"></i>
                         <span className="font-bold text-amber-300">牌庫 <span className="font-mono text-amber-400">{deck.length}</span></span>
                       </button>
-                      <div className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-cyan-500/40 px-2 rounded-full text-[9.5px] shadow">
-                        <i className="fa-solid fa-box-archive text-cyan-400"></i>
-                        <span className="font-bold text-cyan-300">備用牌 <span className="font-mono text-cyan-400">{reserveCards.filter(Boolean).length}</span></span>
-                      </div>
                     </div>
 
                     {(gameOver && victoryDismissed) ? (
@@ -2672,7 +2787,7 @@
                               onPointerMove={handleHandPointerMove}
                               onPointerUp={handleHandPointerUp}
                               onPointerCancel={handleHandPointerCancel}
-                              className={`hand-card relative w-[130px] h-[190px] bg-slate-900 border-2 rounded-xl p-2 flex flex-col justify-between shrink-0 cursor-grab active:cursor-grabbing touch-none select-none ${dragGhost && dragGhost.card.id === card.id ? 'opacity-30' : ''} ${
+                              className={`hand-card relative w-[130px] h-[190px] bg-slate-900 border-2 rounded-xl p-2 flex flex-col justify-between shrink-0 cursor-grab active:cursor-grabbing touch-none select-none ${dragGhost && dragGhost.card.id === card.id ? 'opacity-30' : ''} ${drawAnim && drawAnim.card && drawAnim.card.id === card.id ? 'opacity-0' : ''} ${
                                 isSelected ? 'selected border-amber-400' : 'border-cyan-500/80 hover:border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                               }`}
                             >
@@ -2694,6 +2809,43 @@
                       )}
                     </div>
                   </div>
+
+                  {/* 抽牌小動畫：牌背飛入 ➔ 翻面 ➔ 短暫放大 ➔ 歸位（只有玩家自己抽牌才播；AI 抽牌不公開） */}
+                  {drawAnim && drawAnim.card && (() => {
+                    const k = drawAnim.k, c = drawAnim.card;
+                    const sx = drawAnim.from === 'center' ? 0 : 110;
+                    return (
+                      <div key={drawAnim.key} className="absolute inset-0 z-[35] flex items-center justify-center pointer-events-none">
+                        <div style={{ transform: `translateX(${drawAnim.toX}px)` }}>
+                          <div style={{ '--sx': `${sx}px`, '--sy': '-260px', animation: `fxDrawFly ${0.5 * k}s cubic-bezier(.2,.8,.3,1) both` }}>
+                            <div style={{ animation: `fxDrawPop ${0.68 * k}s ease-in-out ${0.72 * k}s both` }}>
+                              <div className="relative w-[130px] h-[190px]">
+                                <div className="absolute inset-0" style={{ animation: `fxFlipOut ${0.18 * k}s ease-in ${0.5 * k}s both` }}>
+                                  <div className="w-full h-full rounded-xl border-2 border-amber-500/70 bg-gradient-to-br from-indigo-900 to-slate-800 flex items-center justify-center shadow-xl">
+                                    <i className="fa-solid fa-moon text-amber-400/80 text-3xl"></i>
+                                  </div>
+                                </div>
+                                <div className="absolute inset-0" style={{ animation: `fxFlipIn ${0.22 * k}s ease-out ${0.68 * k}s both` }}>
+                                  <div className="w-full h-full bg-slate-900 border-2 border-cyan-500/80 rounded-xl p-2 flex flex-col justify-between" style={{ animation: `fxDrawGlow ${0.68 * k}s ease-in-out ${0.72 * k}s both` }}>
+                                    <div className="flex justify-between items-center">
+                                      <span className="bg-cyan-500 text-slate-950 text-sm font-black w-6 h-6 rounded-full flex items-center justify-center font-mono">{c.value}</span>
+                                    </div>
+                                    <div className="w-full h-16 bg-slate-800/90 rounded-lg border border-slate-700/60 flex items-center justify-center my-1">
+                                      <i className={`fa-solid ${c.icon} text-3xl text-cyan-400 filter drop-shadow`}></i>
+                                    </div>
+                                    <div className="text-center">
+                                      <div className="text-xs font-black text-slate-100 truncate tracking-wide">{c.title}</div>
+                                      <div className="text-[8.5px] text-slate-300 line-clamp-3 leading-tight mt-0.5">{c.desc}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* 右側浮動操作按鈕 */}
                   <div className={`absolute right-2 top-1/2 -translate-y-1/2 w-[16%] max-w-[70px] h-[90%] flex flex-col justify-center space-y-2 z-20 p-1 ${myHand.length === 1 ? '' : 'hidden'}`}>
