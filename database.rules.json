@@ -1,0 +1,40 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$roomCode": {
+        ".read": "auth != null && (!data.exists() || data.child('status').val() == 'lobby' || data.child('players').child(auth.uid).exists())",
+        ".write": "auth != null && (!data.exists() || data.child('hostUid').val() == auth.uid)",
+        ".validate": "newData.hasChildren(['hostUid', 'status', 'players'])",
+        "players": {
+          "$uid": {
+            ".write": "auth != null && auth.uid == $uid && data.parent().parent().child('status').val() == 'lobby'",
+            ".validate": "newData.hasChildren(['uid', 'name', 'joinedAt']) && newData.child('uid').val() == $uid && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 16 && newData.child('joinedAt').isNumber()"
+          }
+        },
+        "aiCount": {
+          ".write": "auth != null && data.parent().child('hostUid').val() == auth.uid && data.parent().child('status').val() == 'lobby'",
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 6"
+        },
+        "gameState": {
+          ".write": "auth != null && data.parent().child('players').child(auth.uid).exists()",
+          ".validate": "newData.hasChildren(['revision', 'players', 'playerHands', 'currentTurnIndex']) && newData.child('revision').isNumber()"
+        },
+        "gamePlayers": {
+          ".write": "auth != null && data.parent().child('hostUid').val() == auth.uid"
+        },
+        "status": {
+          ".write": "auth != null && data.parent().child('hostUid').val() == auth.uid"
+        },
+        "hostUid": {
+          ".write": "auth != null && data.parent().child('hostUid').val() == auth.uid"
+        },
+        "round": {
+          ".write": "auth != null && data.parent().child('hostUid').val() == auth.uid",
+          ".validate": "newData.isNumber() && newData.val() >= 0"
+        }
+      }
+    }
+  }
+}
