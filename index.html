@@ -54,6 +54,51 @@
         .event-out { border-color: #f43f5e; box-shadow: 0 0 10px 2px rgba(244,63,94,.5); animation: flash-out 0.9s ease-in-out 3; }
         .event-revive { border-color: #34d399; box-shadow: 0 0 10px 2px rgba(52,211,153,.5); animation: flash-revive 0.9s ease-in-out 3; }
 
+        /* 效果動畫（C 區疊層） */
+        .fx-layer { animation: fxLife var(--fx-dur, 2.4s) linear both; }
+        @keyframes fxLife { 0% { opacity: 0; } 6% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes fxPop { 0% { opacity: 0; transform: scale(.3) translateY(18px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes fxFadeUp { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
+        @keyframes fxInL { 0% { opacity: 0; transform: translateX(-36px); } 100% { opacity: 1; transform: translateX(0); } }
+        @keyframes fxInR { 0% { opacity: 0; transform: translateX(36px); } 100% { opacity: 1; transform: translateX(0); } }
+        @keyframes fxFlip { 0% { opacity: 0; transform: scaleY(.1) scale(.8); } 100% { opacity: 1; transform: scaleY(1) scale(1); } }
+        @keyframes fxFlipOut { 0% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(0); opacity: 0; } }
+        @keyframes fxFlipIn { 0% { transform: scaleX(0); opacity: 0; } 100% { transform: scaleX(1); opacity: 1; } }
+        @keyframes fxStamp {
+          0% { opacity: 0; transform: translate(-50%, -50%) scale(3) rotate(-25deg); }
+          70% { opacity: 1; transform: translate(-50%, -50%) scale(.9) rotate(-10deg); }
+          100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-12deg); }
+        }
+        @keyframes fxShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+        @keyframes fxClashL { 0% { opacity: 0; transform: translateX(-70px); } 100% { opacity: 1; transform: translateX(0); } }
+        @keyframes fxClashR { 0% { opacity: 0; transform: translateX(70px); } 100% { opacity: 1; transform: translateX(0); } }
+        @keyframes fxKnockL { 0% { transform: translate(0, 0) rotate(0); } 100% { transform: translate(-46px, 20px) rotate(-26deg); } }
+        @keyframes fxKnockR { 0% { transform: translate(0, 0) rotate(0); } 100% { transform: translate(46px, 20px) rotate(26deg); } }
+        @keyframes fxFlyL { 0% { opacity: 1; transform: translateX(0) scale(1); } 100% { opacity: 0; transform: translateX(-90px) scale(.5); } }
+        @keyframes fxCrossA { 0% { transform: translate(-28px, 0); } 50% { transform: translate(0, -22px); } 100% { transform: translate(28px, 0); } }
+        @keyframes fxCrossB { 0% { transform: translate(28px, 0); } 50% { transform: translate(0, 22px); } 100% { transform: translate(-28px, 0); } }
+        @keyframes fxShuffle {
+          0% { transform: rotate(0) translateX(0); } 25% { transform: rotate(-14deg) translateX(-8px); }
+          50% { transform: rotate(12deg) translateX(8px); } 75% { transform: rotate(-8deg) translateX(-4px); } 100% { transform: rotate(0) translateX(0); }
+        }
+        @keyframes fxDrunkCard {
+          0% { opacity: 0; transform: translate(var(--x), var(--y)) scale(.6); }
+          8% { opacity: 1; }
+          30% { opacity: 1; transform: translate(0, 0) scale(.9); }
+          62% { opacity: 1; transform: translate(0, 0) scale(.9); }
+          92% { opacity: 1; transform: translate(var(--x), var(--y)) scale(.7); }
+          100% { opacity: 0; transform: translate(var(--x), var(--y)) scale(.6); }
+        }
+        @keyframes fxFlash { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.9) drop-shadow(0 0 8px #fbbf24); } }
+        @keyframes fxSlot {
+          0% { opacity: 0; transform: translate(var(--a), 10px); }
+          15% { opacity: 1; transform: translate(var(--a), 0); }
+          30% { transform: translate(var(--a), -22px); }
+          55% { transform: translate(0, -30px) rotate(var(--r)); }
+          80% { transform: translate(var(--b), -22px); }
+          100% { opacity: 1; transform: translate(var(--b), 0); }
+        }
+
         /* 桌面端外框效果 */
         @media (min-width: 600px) {
             .mobile-container {
@@ -112,7 +157,7 @@
           { title: '科學怪人', desc: '牌庫耗盡時若手握此牌，最終數值為面前最小與最大牌的總和。', value: 4, icon: 'fa-bolt', category: '數值 4', totalCount: 1, type: 'PASSIVE' },
           { title: '叛徒', desc: '第3張月亮翻開且狼人獲勝時，若您手握叛徒，您也獲勝。', value: 5, icon: 'fa-mask', category: '數值 5', totalCount: 1, type: 'PASSIVE' },
           { title: '賞金獵人', desc: '指定玩家公開手牌並重抽；若重抽到市長或狼人，該玩家出局。', value: 5, icon: 'fa-crosshairs', category: '數值 5', totalCount: 1, type: 'BOUNTY_HUNTER' },
-          { title: '掘墓人', desc: '從一位玩家面前取一張非狼人牌加入手牌，再打出1張。', value: 6, icon: 'fa-skull', category: '數值 6', totalCount: 1, type: 'GRAVEDIGGER' },
+          { title: '掘墓人', desc: '從一位玩家面前取一張牌（狼人、掘墓人除外）加入手牌，再選1張打出並結算。', value: 6, icon: 'fa-skull', category: '數值 6', totalCount: 1, type: 'GRAVEDIGGER' },
           { title: '扒手', desc: '指定兩位對手，互換手牌。', value: 6, icon: 'fa-people-arrows-left-right', category: '數值 6', totalCount: 1, type: 'PICKPOCKET' },
           { title: '間諜', desc: '若他人猜測您的手牌失敗，可打出間諜使猜測者出局並接手其手牌。', value: 7, icon: 'fa-user-secret', category: '數值 7', totalCount: 1, type: 'SPY' },
           { title: '小偷', desc: '與一位對手交換手牌，然後立刻進行額外回合。', value: 7, icon: 'fa-mask', category: '數值 7', totalCount: 1, type: 'THIEF' },
@@ -131,12 +176,404 @@
 
         // 廣播／紀錄文字轉換：數值 → emoji、卡牌名（不用【】）金黃粗體、「你」天藍粗體
         const NUM_KEYCAPS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+        // 掘墓人可奪取的牌：狼人與掘墓人不可取
+        const canSteal = (c) => !!c && c.type !== 'WEREWOLF' && c.type !== 'GRAVEDIGGER';
+
         const numEmoji = (n) => {
           const v = parseInt(n, 10);
           if (v === 10) return '🔟';
           return String(v).split('').map(d => NUM_KEYCAPS[parseInt(d, 10)]).join('');
         };
         const KNOWN_CARD_TITLES = new Set([...BASE_CARDS_DEF.map(c => c.title), '狼人', ...MOON_CARDS.map(m => m.title)]);
+        // ==== FX START：C 區效果動畫（純視覺疊層，不影響遊戲流程；資訊皆為公開資訊）====
+        const FX_KIND = {
+          '村民': 'guess', '刺客': 'guess', '稅務官': 'ask', '審判官': 'ask', '先知': 'peek',
+          '酒保': 'compare', '小女孩': 'compare', '小偷': 'swap', '扒手': 'swap', '醉漢': 'drunk',
+          '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
+          '市長': 'selfout', '狼人': 'selfout',
+        };
+        const FX_DURATION = { guess: 2700, ask: 2500, peek: 2100, compare: 3000, swap: 2700, drunk: 3000, watch: 2700, shield: 2100, bounty: 2800, grave: 2700, witch: 2500, selfout: 2100, plain: 2200, none: 1600 };
+        const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
+        const FX_STAMP_CLS = {
+          out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
+          ok: 'text-amber-300 border-amber-400', revive: 'text-emerald-300 border-emerald-400', tie: 'text-sky-300 border-sky-400',
+          spy: 'text-fuchsia-300 border-fuchsia-400',
+        };
+
+        // 由「動作行 + 結果行」推導動畫內容。只使用公開資訊；解析失敗回傳 null（不播動畫）
+        function deriveFx(actionText, resultText, reveal, st) {
+          const m = /^(\S+) (?:對 (\S+) )?打出了\((\d+)\)【([^】]+)】(.*)$/.exec(String(actionText || ''));
+          if (!m || !st || !st.players) return null;
+          const meta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === m[4]);
+          if (!meta) return null;
+          const players = st.players;
+          const byName = (n) => (n ? (players.find(p => p.name === n) || null) : null);
+          const src = byName(m[1]);
+          const tgt = m[2] === '自己' ? src : byName(m[2]);
+          const res = String(resultText || '');
+          const tail = m[5] || '';
+          const card = { title: meta.title, value: parseInt(m[3], 10), icon: meta.icon };
+
+          let tone = 'ok';
+          if (/無任何效果/.test(res)) tone = 'none';
+          else if (/自我淘汰/.test(res)) tone = 'out';
+          else if (/復活了/.test(res)) tone = 'revive';
+          else if (/能力無效|能力失敗|無有效目標|無卡牌可選|無可奪取|不足|無法勝利/.test(res)) tone = 'nofx';
+          else if (/反殺/.test(res)) tone = 'spy';
+          else if (/平手/.test(res)) tone = 'tie';
+          else if (/出局|淘汰/.test(res)) tone = 'out';
+          else if (/失敗/.test(res)) tone = 'fail';
+
+          let kind = FX_KIND[meta.title] || 'plain';
+          if (tone === 'none' || meta.title === '僕人') kind = 'none';
+          else if (tone === 'nofx') kind = 'plain';
+          const needTgt = ['guess', 'ask', 'peek', 'bounty', 'grave'];
+          if (needTgt.includes(kind) && !tgt) kind = 'plain';
+
+          const fx = { key: `${Date.now()}-${Math.random()}`, kind, card, src, tgt, tone, noneText: meta.title === '僕人' ? '置於面前・待命' : '無效果' };
+
+          if (kind === 'guess') {
+            const gm = /猜\((\d+)\)(?:與\((\d+)\))?/.exec(tail);
+            fx.guesses = gm ? [gm[1], gm[2]].filter(v => v !== undefined) : [];
+          } else if (kind === 'ask') {
+            fx.question = meta.title === '稅務官' ? '0 或 1' : '9 或 10';
+          } else if (kind === 'compare') {
+            fx.mode = meta.title === '酒保' ? '比小' : '比大';
+            if (tone === 'out') {
+              const lm = /(\S+?)(?:的)?手牌(?:\(\d+\))?較[小大]/.exec(res);
+              const loser = lm ? byName(lm[1]) : null;
+              if (!loser || !tgt || !src) kind = fx.kind = 'plain';
+              else {
+                fx.loserId = loser.id;
+                // 輸家的牌依規則翻開放在面前（公開資訊）
+                const lc = ((st.playerHands || {})[loser.id] || []).filter(Boolean)[0];
+                if (lc) {
+                  const lmeta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === lc.title);
+                  fx.loserCard = { title: lc.title, value: lc.value, icon: (lmeta && lmeta.icon) || lc.icon };
+                }
+              }
+            } else if (tone !== 'tie' || !tgt || !src) kind = fx.kind = 'plain';
+          } else if (kind === 'swap') {
+            if (meta.title === '小偷') {
+              fx.a = src; fx.b = tgt; fx.extraTurn = /額外回合/.test(res);
+              if (!fx.a || !fx.b) kind = fx.kind = 'plain';
+            } else {
+              const pm = /秘密交換了 (\S+) 與 (\S+) 的手牌/.exec(res);
+              fx.a = pm ? byName(pm[1]) : null; fx.b = pm ? byName(pm[2]) : null;
+              if (!fx.a || !fx.b) kind = fx.kind = 'plain';
+            }
+          } else if (kind === 'drunk') {
+            const sm = /（(.+?) 受保護未參與）/.exec(res);
+            const skippedNames = sm ? sm[1].split('、') : [];
+            fx.participants = players.filter(p => p.status === '存活' && !skippedNames.includes(p.name));
+            fx.skipped = players.filter(p => skippedNames.includes(p.name));
+            if (!fx.participants.length) kind = fx.kind = 'plain';
+          } else if (kind === 'bounty') {
+            const bm = /\((\d+)\)【([^】]+)】/.exec(String(reveal || ''));
+            if (bm) {
+              const bmeta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === bm[2]);
+              fx.revealed = { value: parseInt(bm[1], 10), title: bm[2], icon: bmeta && bmeta.icon };
+            }
+          } else if (kind === 'grave') {
+            const gm = /面前\((\d+)\)【([^】]+)】/.exec(res);
+            if (gm) {
+              const gmeta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === gm[2]);
+              fx.stolen = { value: parseInt(gm[1], 10), title: gm[2], icon: gmeta && gmeta.icon };
+            }
+          } else if (kind === 'witch') {
+            const wm = /復活了 (\S+)/.exec(res);
+            fx.tgt = wm ? byName(wm[1]) : null;
+            if (!fx.tgt) kind = fx.kind = 'plain';
+          }
+
+          // 章（淘汰／失敗…）：只有結果公開時才蓋；先知、守夜人、醉漢等秘密或無勝負的牌不蓋
+          const okStamp = { swap: '交換' };
+          fx.stampText = tone === 'ok' ? (okStamp[kind] || null) : (FX_STAMP_TEXT[tone] || null);
+          if (tone === 'none') fx.stampText = null;
+          fx.stampTone = tone;
+          fx.stampOn = (tone === 'spy' || kind === 'selfout') ? 'src' : 'tgt';
+          fx.duration = FX_DURATION[kind] || 2200;
+          return fx;
+        }
+
+        function FxChip({ p, size = 'w-11 h-11 text-xl', dim = false, glow = '' }) {
+          if (!p) return null;
+          return (
+            <div className={`flex flex-col items-center gap-0.5 ${dim ? 'opacity-40' : ''}`}>
+              <div className={`${size} rounded-full bg-gradient-to-br ${p.gradient} flex items-center justify-center border-2 border-white/30 shadow-lg ${glow}`}>{p.emoji}</div>
+              <span className={`text-[10px] leading-none font-black whitespace-nowrap ${p.id === 0 ? 'text-sky-300' : 'text-slate-100'}`}>{p.name}</span>
+            </div>
+          );
+        }
+        function FxBack({ cls = 'w-11 h-[60px]' }) {
+          return (
+            <div className={`${cls} rounded-md border-2 border-amber-500/70 bg-gradient-to-br from-indigo-900 to-slate-800 flex items-center justify-center shadow`}>
+              <i className="fa-solid fa-moon text-amber-400/80 text-xs"></i>
+            </div>
+          );
+        }
+        function FxFace({ c, cls = 'w-11 h-[60px]' }) {
+          if (!c) return <FxBack cls={cls} />;
+          return (
+            <div className={`${cls} rounded-md border-2 border-amber-400 bg-slate-900 flex flex-col items-center justify-center shadow-lg`}>
+              <span className="font-mono font-black text-amber-300 text-base leading-none">{c.value}</span>
+              <i className={`fa-solid ${c.icon || 'fa-circle'} text-amber-400/80 text-sm my-0.5`}></i>
+              <span className="text-[9px] font-black text-amber-200 leading-none">{c.title}</span>
+            </div>
+          );
+        }
+        function FxStamp({ tone, text, delay = 1.5 }) {
+          if (!text) return null;
+          return (
+            <div
+              className={`absolute left-1/2 top-1/2 z-10 px-2 py-0.5 border-[3px] rounded-md font-black text-base tracking-widest whitespace-nowrap bg-slate-950/70 pointer-events-none ${FX_STAMP_CLS[tone] || FX_STAMP_CLS.ok}`}
+              style={{ animation: `fxStamp .35s ease-out ${delay}s both` }}
+            >{text}</div>
+          );
+        }
+
+        function FxOverlay({ fx, onSkip }) {
+          const { kind, card, src, tgt } = fx;
+          const an = (name, dur, delay, ease = 'cubic-bezier(.2,.9,.3,1.15)') => ({ animation: `${name} ${dur}s ${ease} ${delay}s both` });
+          const stamp = (delay) => <FxStamp tone={fx.stampTone} text={fx.stampText} delay={delay} />;
+          const isNone = kind === 'none';
+          let body = null;
+
+          if (kind === 'none') {
+            body = (
+              <div className="px-3 py-1 rounded-full bg-slate-800/90 border border-slate-600 text-slate-300 text-[11px] font-black shadow-lg">
+                <span className="font-mono text-amber-300 mr-1">{card.value}</span>{card.title}｜{fx.noneText}
+              </div>
+            );
+          } else if (kind === 'compare') {
+            const loserSide = fx.loserId === undefined ? null : (src && fx.loserId === src.id ? 'L' : 'R');
+            const col = (p, side) => {
+              const isLoser = loserSide === side;
+              const inner = isLoser
+                ? an(side === 'L' ? 'fxKnockL' : 'fxKnockR', 0.5, 1.35, 'ease-out')
+                : an('fxShake', 0.5, 1.35);
+              return (
+                <div className="flex flex-col items-center gap-1.5" style={an(side === 'L' ? 'fxClashL' : 'fxClashR', 0.6, 0.5, 'cubic-bezier(.3,1.4,.5,1)')}>
+                  <FxChip p={p} />
+                  <div style={inner}>
+                    <div className="relative w-14 h-[76px]">
+                      <div className="absolute inset-0" style={isLoser ? an('fxFlipOut', 0.2, 1.5, 'ease-in') : undefined}><FxBack cls="w-14 h-[76px]" /></div>
+                      {isLoser && fx.loserCard && (
+                        <div className="absolute inset-0" style={an('fxFlipIn', 0.25, 1.7, 'ease-out')}><FxFace c={fx.loserCard} cls="w-14 h-[76px]" /></div>
+                      )}
+                      {isLoser && stamp(2.0)}
+                    </div>
+                  </div>
+                </div>
+              );
+            };
+            body = (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5" style={an('fxPop', 0.4, 0)}>
+                  <FxFace c={card} cls="w-9 h-[48px]" />
+                  <span className="text-amber-300 font-black text-sm">{fx.mode}</span>
+                </div>
+                <div className="relative flex items-center justify-center gap-3">
+                  {col(src, 'L')}
+                  <span className="text-white font-black text-lg" style={an('fxPop', 0.3, 0.3)}>VS</span>
+                  {col(tgt, 'R')}
+                  {fx.tone === 'tie' && stamp(1.5)}
+                </div>
+              </div>
+            );
+          } else if (kind === 'swap') {
+            body = (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-200" style={an('fxPop', 0.4, 0)}>
+                  {kind === 'swap' && card.title === '扒手' && <FxChip p={src} size="w-7 h-7 text-sm" />}
+                  <span><span className="font-mono text-amber-300">{card.value}</span> {card.title}</span>
+                </div>
+                <div className="flex items-center justify-center gap-3">
+                  <div style={an('fxInL', 0.4, 0.1)}><FxChip p={fx.a} /></div>
+                  <div className="relative w-[88px] h-[70px]">
+                    <div className="absolute left-1/2 top-1/2 -ml-[16px] -mt-[22px]" style={{ animation: 'fxCrossA 1.1s ease-in-out .7s both' }}><FxBack cls="w-8 h-11" /></div>
+                    <div className="absolute left-1/2 top-1/2 -ml-[16px] -mt-[22px]" style={{ animation: 'fxCrossB 1.1s ease-in-out .7s both' }}><FxBack cls="w-8 h-11" /></div>
+                    {stamp(1.9)}
+                  </div>
+                  <div style={an('fxInR', 0.4, 0.1)}><FxChip p={fx.b} /></div>
+                </div>
+                {fx.extraTurn && (
+                  <div className="px-2 py-0.5 rounded-full bg-emerald-900/70 border border-emerald-500/60 text-emerald-200 text-[10px] font-black" style={an('fxFadeUp', 0.4, 1.9)}>獲得額外回合</div>
+                )}
+              </div>
+            );
+          } else if (kind === 'drunk') {
+            const ids = fx.participants || [];
+            const n = ids.length;
+            const pos = (i) => {
+              const a = (-90 + (360 / n) * i) * Math.PI / 180;
+              return { x: Math.round(Math.cos(a) * 88), y: Math.round(Math.sin(a) * 60) };
+            };
+            body = (
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-200" style={an('fxPop', 0.4, 0)}>
+                  <FxChip p={src} size="w-6 h-6 text-xs" />
+                  <span><span className="font-mono text-amber-300">{card.value}</span> {card.title}｜全員手牌洗勻重發</span>
+                </div>
+                <div className="relative w-[240px] h-[160px]">
+                  {ids.map((p, i) => {
+                    const { x, y } = pos(i);
+                    return (
+                      <div key={`c${p.id}`} className="absolute inset-0 flex items-center justify-center">
+                        <div style={{ transform: `translate(${x}px, ${y}px)`, animation: `fxFlash .6s ease-in-out 2.3s both` }}>
+                          <FxChip p={p} size="w-9 h-9 text-base" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div style={an('fxShuffle', 0.9, 0.75, 'ease-in-out')}>
+                      <div className="relative w-9 h-12">
+                        <div className="absolute -left-1 -top-1"><FxBack cls="w-9 h-12" /></div>
+                        <div className="absolute left-0 top-0"><FxBack cls="w-9 h-12" /></div>
+                      </div>
+                    </div>
+                  </div>
+                  {ids.map((p, i) => {
+                    const { x, y } = pos(i);
+                    return (
+                      <div key={`k${p.id}`} className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div style={{ '--x': `${x}px`, '--y': `${y}px`, animation: `fxDrunkCard 2.5s ease-in-out ${0.15 + i * 0.07}s both` }}>
+                          <FxBack cls="w-6 h-8" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {fx.skipped && fx.skipped.length > 0 && (
+                  <div className="text-[9px] font-bold text-cyan-300" style={an('fxFadeUp', 0.4, 0.5)}><i className="fa-solid fa-shield-halved mr-1"></i>{fx.skipped.map(p => p.name).join('、')} 受保護未參與</div>
+                )}
+              </div>
+            );
+          } else if (kind === 'watch') {
+            body = (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5" style={an('fxPop', 0.4, 0)}>
+                  <FxChip p={src} />
+                  <span className="text-[10px] font-black text-amber-200"><span className="font-mono text-amber-300">{card.value}</span> {card.title}｜調整中央暗牌</span>
+                </div>
+                <div className="relative w-[170px] h-[92px]">
+                  {[0, 1, 2].map(i => (
+                    <div key={i} className="absolute left-1/2 top-1/2 -ml-[22px] -mt-[30px]"
+                      style={{ '--a': `${(i - 1) * 54}px`, '--b': `${(((i + 1) % 3) - 1) * 54}px`, '--r': `${(i - 1) * 9}deg`, animation: `fxSlot 2.0s ease-in-out ${0.3 + i * 0.05}s both` }}>
+                      <FxBack />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          } else if (kind === 'shield') {
+            body = (
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative" style={an('fxPop', 0.4, 0)}>
+                  <FxChip p={src} size="w-14 h-14 text-2xl" glow="ring-4 ring-cyan-400/70" />
+                  <i className="fa-solid fa-shield-halved absolute -right-4 -top-2 text-3xl text-cyan-300 drop-shadow" style={an('fxPop', 0.4, 0.5)}></i>
+                </div>
+                <div className="text-[11px] font-black text-cyan-200" style={an('fxFadeUp', 0.4, 0.9)}><span className="font-mono text-amber-300">{card.value}</span> {card.title}｜受保護至下個回合</div>
+              </div>
+            );
+          } else {
+            // 通用：出牌者 ➔ 牌 ➔ 目標，再依牌種顯示中間資訊與結果章
+            const stampSrc = fx.stampOn === 'src';
+            const stampTgt = fx.stampOn === 'tgt';
+            let badges = null;
+            let stampAt = 1.5;
+            if (kind === 'guess') {
+              const gs = fx.guesses || [];
+              stampAt = 1.0 + gs.length * 0.3 + 0.3;
+              badges = gs.map((g, i) => (
+                <div key={i} className="px-2.5 py-1 rounded-lg bg-slate-800 border border-amber-500/60 text-amber-200 font-black text-sm" style={an('fxFlip', 0.35, 1.0 + i * 0.3)}>
+                  猜 <span className="font-mono text-lg text-amber-300">{g}</span>
+                </div>
+              ));
+            } else if (kind === 'ask') {
+              badges = (
+                <div className="px-2.5 py-1 rounded-lg bg-slate-800 border border-amber-500/60 text-amber-200 font-black text-sm" style={an('fxFlip', 0.35, 1.0)}>
+                  手牌是 <span className="font-mono text-lg text-amber-300">{fx.question}</span> ？
+                </div>
+              );
+              stampAt = 1.6;
+            } else if (kind === 'peek') {
+              badges = (
+                <div className="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-500/60 text-sky-200 font-black text-xs" style={an('fxFlip', 0.35, 1.0)}>
+                  <i className="fa-solid fa-eye mr-1"></i>秘密檢視中…
+                </div>
+              );
+            } else if (kind === 'bounty') {
+              badges = (
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-center gap-0.5" style={an('fxFlipIn', 0.3, 1.0)}>
+                    {fx.revealed ? <FxFace c={fx.revealed} /> : <FxBack />}
+                    <span className="text-[9px] font-black text-fuchsia-300">公開手牌</span>
+                  </div>
+                  <i className="fa-solid fa-arrow-right text-amber-400 text-xs" style={an('fxFadeUp', 0.3, 1.5)}></i>
+                  <div className="flex flex-col items-center gap-0.5" style={an('fxFlipIn', 0.3, 1.7)}>
+                    <FxBack />
+                    <span className="text-[9px] font-black text-amber-200">重抽 1 張</span>
+                  </div>
+                </div>
+              );
+            } else if (kind === 'grave') {
+              badges = fx.stolen ? (
+                <div className="flex flex-col items-center gap-0.5" style={{ animation: 'fxFlyL 1.0s ease-in 1.4s both' }}>
+                  <div style={an('fxFlipIn', 0.3, 1.0)}><FxFace c={fx.stolen} /></div>
+                  <span className="text-[9px] font-black text-amber-200">奪取</span>
+                </div>
+              ) : null;
+            } else if (kind === 'witch') {
+              stampAt = 1.2;
+            } else if (kind === 'selfout') {
+              stampAt = 0.9;
+            }
+            const srcWrap = (
+              <div className="relative" style={an('fxInL', 0.4, 0)}>
+                <div style={stampSrc && fx.stampText ? an('fxShake', 0.5, stampAt + 0.2) : undefined}><FxChip p={src} /></div>
+                {stampSrc && stamp(stampAt)}
+              </div>
+            );
+            body = (
+              <div className="flex flex-col items-center">
+                <div className="flex items-center justify-center gap-2.5">
+                  {srcWrap}
+                  <div style={an('fxPop', 0.4, 0.15)}><FxFace c={card} cls="w-14 h-[76px]" /></div>
+                  {tgt && tgt !== src && (
+                    <>
+                      <i className="fa-solid fa-arrow-right text-amber-400 text-sm" style={an('fxFadeUp', 0.3, 0.5)}></i>
+                      <div className="relative" style={an('fxInR', 0.4, 0.6)}>
+                        <div style={stampTgt && fx.stampText && fx.tone === 'out' ? an('fxShake', 0.5, stampAt + 0.2) : undefined}>
+                          <FxChip p={tgt} glow={kind === 'witch' ? 'ring-4 ring-emerald-400/70' : ''} />
+                        </div>
+                        {stampTgt && stamp(stampAt)}
+                      </div>
+                    </>
+                  )}
+                  {tgt && tgt === src && kind !== 'selfout' && (
+                    <span className="text-[10px] font-black text-slate-300" style={an('fxFadeUp', 0.3, 0.5)}>對自己</span>
+                  )}
+                </div>
+                {badges && <div className="mt-3 min-h-[40px] flex items-center justify-center gap-2">{badges}</div>}
+              </div>
+            );
+          }
+
+          return (
+            <div
+              className={`fx-layer absolute inset-x-0 top-6 bottom-0 z-30 flex justify-center rounded-lg ${isNone ? 'items-end pb-3 pointer-events-none' : 'items-center bg-slate-950/90 cursor-pointer'}`}
+              style={{ '--fx-dur': `${fx.duration / 1000}s` }}
+              onClick={isNone ? undefined : onSkip}
+            >
+              {body}
+              {!isNone && <span className="absolute bottom-1 right-2 text-[8px] text-slate-500 pointer-events-none">點一下略過</span>}
+            </div>
+          );
+        }
+        // ==== FX END ====
+
         function RichLog({ text, nameClass = 'text-amber-300' }) {
           if (text === undefined || text === null) return null;
           const str = String(text);
@@ -200,7 +637,7 @@
           { v: 4, name: '科學怪人', d: '牌庫耗盡時若手握此牌，最終數值 = 面前最小牌 + 最大牌。' },
           { v: 5, name: '叛徒', d: '第 3 張月亮翻開且狼人獲勝時，手握叛徒者一同獲勝。' },
           { v: 5, name: '賞金獵人', d: '指定玩家公開手牌並重抽；若以此打出市長或狼人則出局，打出吸血鬼且達成條件則獲勝。' },
-          { v: 6, name: '掘墓人', d: '從一位玩家面前取 1 張牌（狼人除外）加入手牌，再選 1 張打出。' },
+          { v: 6, name: '掘墓人', d: '從一位玩家面前取 1 張牌（狼人、掘墓人除外）加入手牌，再選 1 張打出並結算。' },
           { v: 6, name: '扒手', d: '指定兩位對手互換手牌。' },
           { v: 7, name: '間諜', d: '他人用刺客／村民猜你失敗時，可打出間諜使其出局並接手其手牌。' },
           { v: 7, name: '小偷', d: '與一位對手交換手牌，並立刻進行額外回合。' },
@@ -214,7 +651,7 @@
         const makeCenterMeta = () => ({ viewedBy: [], swappedBy: [], myCard: null, myStale: false });
 
         function App() {
-          const [version] = useState('v0.0.11 M');
+          const [version] = useState('v0.0.13 M');
 
           // 全局遊戲狀態
           const [players, setPlayers] = useState(INITIAL_PLAYERS);
@@ -240,6 +677,9 @@
           const [playerHands, setPlayerHands] = useState({});
           const [centerCards, setCenterCards] = useState([]);
           const [playedCardArena, setPlayedCardArena] = useState(null);
+          const [fx, setFx] = useState(null);          // C 區效果動畫
+          const fxTimerRef = useRef(null);
+          const fxUntilRef = useRef(0);
           const [historyLogs, setHistoryLogs] = useState([]);
           const [witchTargetOwner, setWitchTargetOwner] = useState(null);
 
@@ -290,6 +730,19 @@
             return arr;
           };
 
+          // 效果動畫：啟動／略過
+          const startFx = (f) => {
+            clearTimeout(fxTimerRef.current);
+            setFx(f);
+            fxUntilRef.current = Date.now() + f.duration;
+            fxTimerRef.current = setTimeout(() => setFx(null), f.duration + 60);
+          };
+          const skipFx = () => {
+            clearTimeout(fxTimerRef.current);
+            fxUntilRef.current = 0;
+            setFx(null);
+          };
+
           // 統一更新廣播與紀錄
           const logActionAndResult = (actionText, resultText, playerName = '系統', event = null, reveal = '') => {
             setBroadcastAction(actionText);
@@ -300,6 +753,13 @@
               { id: `${Date.now()}-${Math.random()}`, player: playerName, action: actionText, result: resultText, reveal, event, card: `${actionText} ➔ ${resultText}` },
               ...prev
             ]);
+            // 效果動畫：由動作行與結果行推導（純視覺；解析失敗就不播）
+            if (!gameOverRef.current) {
+              try {
+                const f = deriveFx(actionText, resultText, reveal, stateRef.current);
+                if (f) startFx(f);
+              } catch (e) { console.warn('fx error', e); }
+            }
           };
 
           // 暗牌追蹤：某人對某一格「拿一還一」（看過 + 換過）
@@ -327,6 +787,9 @@
           };
 
           // AI 的「拿一還一」：隨機拿一格暗牌；優先放回市長，其次放回數值較小的非狼人牌；之後結束回合
+          // AI 出牌選擇：優先打出非市長、非狼人的牌
+          const aiPickCard = (hand) => hand.find(c => c?.type && c.type !== 'WEREWOLF' && c.type !== 'MAYOR') || hand[0];
+
           const aiCenterSwap = (pid) => {
             const st = stateRef.current;
             const slots = st.centerCards.map((c, i) => c ? i : -1).filter(i => i >= 0);
@@ -421,6 +884,9 @@
             lockRef.current = false;
             setActionLocked(false);
             setPlayedCardArena(null);
+            clearTimeout(fxTimerRef.current);
+            fxUntilRef.current = 0;
+            setFx(null);
             setWitchTargetOwner(null);
             setIsReturningCenterCard(false);
             setExtraTurnPlayerId(null);
@@ -944,23 +1410,30 @@
             }
 
             if (card.type === 'GRAVEDIGGER') {
-              const validTargets = players.filter(p => (p.id === sourceId || !p.protected) && p.playedCards.some(c => c && c.type !== 'WEREWOLF'));
+              const validTargets = players.filter(p => (p.id === sourceId || !p.protected) && p.playedCards.some(canSteal));
               if (validTargets.length > 0) {
                 const target = validTargets[Math.floor(Math.random() * validTargets.length)];
-                const nonWolfCards = target.playedCards.filter(c => c.type !== 'WEREWOLF');
-                const stolenCard = nonWolfCards[Math.floor(Math.random() * nonWolfCards.length)];
-                
-                const updatedTargetPlayed = target.playedCards.filter(c => c.id !== stolenCard.id);
-                setPlayers(prev => prev.map(p => p.id === target.id ? { ...p, playedCards: updatedTargetPlayed } : p));
-                
-                const currentAiHand = playerHands[sourceId] || [];
-                setPlayerHands(prev => ({ ...prev, [sourceId]: [...currentAiHand, stolenCard] }));
-                
-                logActionAndResult(`${sourcePlayer.name} 對 ${target.name} 打出了(${card.value})【掘墓人】`, `奪取面前【${stolenCard.title}】`, sourcePlayer.name);
+                const stealable = target.playedCards.filter(canSteal);
+                const { revealedBy: _rb, ...stolenCard } = stealable[Math.floor(Math.random() * stealable.length)];
+
+                setPlayers(prev => prev.map(p => p.id === target.id ? { ...p, playedCards: p.playedCards.filter(c => c.id !== stolenCard.id) } : p));
+                const newHand = [...(playerHands[sourceId] || []).filter(Boolean), stolenCard];
+                setHandNow(sourceId, newHand);
+
+                logActionAndResult(`${sourcePlayer.name} 對 ${target.name} 打出了(${card.value})【掘墓人】`, `奪取面前(${stolenCard.value})【${stolenCard.title}】`, sourcePlayer.name);
+
+                // 後半段：從手牌（原手牌 + 奪取的牌）選 1 張打出並結算，沿用 AI 現有出牌邏輯
+                setTimeout(() => {
+                  if (gameOverRef.current) return;
+                  const h = (stateRef.current.playerHands[sourceId] || []).filter(Boolean);
+                  const pick = aiPickCard(h);
+                  if (pick) executePlayPhase(sourceId, pick);
+                  else advanceTurn();
+                }, 3000);
               } else {
                 logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【掘墓人】`, '場上無卡牌可選 ➔ 能力失敗', sourcePlayer.name);
+                advanceTurn();
               }
-              advanceTurn();
               return;
             }
 
@@ -1176,16 +1649,21 @@
               advanceTurn();
             } else if (type === 'GRAVEDIGGER') {
               const targetP = players.find(p => p.id === targetId);
-              const stolen = targetP.playedCards.find(c => c.id === stolenCardId);
-              if (stolen) {
-                const updatedPlayed = targetP.playedCards.filter(c => c.id !== stolenCardId);
-                setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: updatedPlayed } : p));
-                setPlayerHands(prev => ({ ...prev, 0: [...(prev[0] || []), stolen] }));
+              const stolenRaw = targetP.playedCards.find(c => c.id === stolenCardId);
+              if (stolenRaw && canSteal(stolenRaw)) {
+                const { revealedBy: _rb, ...stolen } = stolenRaw;
+                setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: p.playedCards.filter(c => c.id !== stolenCardId) } : p));
+                setHandNow(0, [...(playerHands[0] || []).filter(Boolean), stolen]);
                 logActionAndResult(`你 對 ${targetP.name} 打出了(6)【掘墓人】`, `奪取了面前(${stolen.value})【${stolen.title}】｜已加入你的手牌`, '你');
+                // 後半段：解除鎖定，讓玩家從 2 張手牌中拖曳 1 張到戰場打出並結算（不結束回合）
+                lockRef.current = false;
+                setActionLocked(false);
+                setSelectedHandCard(null);
+                setBroadcastResult(`➔ 奪取了面前(${stolen.value})【${stolen.title}】，請拖曳 1 張手牌到戰場打出`);
               } else {
                 logActionAndResult('你 打出了(6)【掘墓人】', '場面無可奪取之卡牌 ➔ 能力失敗', '你');
+                advanceTurn();
               }
-              advanceTurn();
             } else if (type === 'BOUNTY_HUNTER') {
               let newDrawn = drawCardForPlayer(targetId, false) || reserveCards[0];
               
@@ -1319,7 +1797,9 @@
 
           const advanceTurn = () => {
             const st0 = stateRef.current;
-            const delay = st0.players[st0.currentTurnIndex]?.isAI ? 3000 : 1200;
+            const baseDelay = st0.players[st0.currentTurnIndex]?.isAI ? 3000 : 1200;
+            // 有效果動畫在播時，等動畫播完再換人
+            const delay = Math.max(baseDelay, fxUntilRef.current - Date.now() + 300);
             setTimeout(() => {
               if (gameOverRef.current) return;
               if (checkWinConditions()) return;
@@ -1391,7 +1871,7 @@
                 }
 
                 if (hand.length >= 2) {
-                  const safeCard = hand.find(c => c?.type && c.type !== 'WEREWOLF' && c.type !== 'MAYOR') || hand[0];
+                  const safeCard = aiPickCard(hand);
                   if (safeCard) executePlayPhase(pid, safeCard);
                   else advanceTurn();
                 } else {
@@ -1578,7 +2058,7 @@
                         )}
                       </div>
                       <div className="text-[10px] font-bold text-amber-300 line-clamp-2 pl-3.5 mt-0.5">
-                        <RichLog text={broadcastResult} nameClass="text-white" />
+                        <RichLog text={broadcastResult} nameClass="text-amber-300" />
                       </div>
                       {broadcastReveal && (
                         <div className="text-[10px] font-bold text-fuchsia-300 line-clamp-2 pl-3.5 mt-0.5"><i className="fa-solid fa-eye mr-1"></i><RichLog text={broadcastReveal} nameClass="text-fuchsia-100" /></div>
@@ -1685,6 +2165,7 @@
                         等待玩家行動...
                       </div>
                     )}
+                    {fx && !(gameOver && victoryDismissed) && <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} />}
                   </div>
                 </main>
 
@@ -1975,7 +2456,7 @@
                               )}
                             </div>
                             <div className="text-slate-200 font-semibold"><RichLog text={log.action !== undefined ? log.action : log.card} nameClass="text-amber-300" /></div>
-                            {log.action !== undefined && log.result && <div className="text-amber-300 font-bold mt-0.5 whitespace-pre-line">➔ <RichLog text={log.result} nameClass="text-white" /></div>}
+                            {log.action !== undefined && log.result && <div className="text-amber-300 font-bold mt-0.5 whitespace-pre-line">➔ <RichLog text={log.result} nameClass="text-amber-300" /></div>}
                             {log.reveal && <div className="text-fuchsia-300 font-bold mt-0.5"><i className="fa-solid fa-eye mr-1"></i><RichLog text={log.reveal} nameClass="text-fuchsia-100" /></div>}
                           </div>
                         );
@@ -2185,7 +2666,7 @@
 
           // 掘墓人選定的玩家面前可奪取卡牌
           const gravediggerTarget = players.find(p => p.id.toString() === selectedTarget);
-          const availableStolenCards = gravediggerTarget ? gravediggerTarget.playedCards.filter(c => c && c.type !== 'WEREWOLF') : [];
+          const availableStolenCards = gravediggerTarget ? gravediggerTarget.playedCards.filter(canSteal) : [];
 
           // 守夜人可選擇的卡牌組合 (手牌 + 中央暗牌)
           const watchmanHand = playerHands[0] || [];
@@ -2236,7 +2717,7 @@
                           <label className="block text-slate-400 mb-1">選擇目標玩家：</label>
                           <select value={selectedTarget} onChange={e => { setSelectedTarget(e.target.value); setSelectedStolenCard(''); }} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-white">
                             <option value="">-- 請選擇玩家 --</option>
-                            {players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(c => c && c.type !== 'WEREWOLF')).map(p => (
+                            {players.filter(p => (p.id === 0 || !p.protected) && p.playedCards.some(canSteal)).map(p => (
                               <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </select>
