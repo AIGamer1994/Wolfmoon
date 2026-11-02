@@ -1388,7 +1388,7 @@
         };
 
         function App() {
-          const [version] = useState('v0.1.23 M');
+          const [version] = useState('v0.1.24 M');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => safeStorageGet('wolfmoon.displayName') || '');
           const [firebaseUser, setFirebaseUser] = useState(null);
@@ -1914,13 +1914,12 @@
             }
             presentLocalFx(f);
           };
-          // 遊戲結束畫面：等淘汰／終局動畫「播放時長」結束後顯示勝利視窗（不等 sticky 點擊 → 不卡死他人）。
-          // 最終結算動畫本身保持 sticky，播完後不自動關，需本機點一下才關（只影響本機畫面）。
+          // 遊戲結束：最終結算／淘汰／終局動畫播完時長後保持 sticky，需本機點一下才關並開勝利視窗。
+          // 點擊只影響本機畫面；準備下一局（nextReady）不依賴本機是否已點關動畫 → 不卡死他人。
           useEffect(() => {
             if (!gameOver) { setVictoryReady(false); return; }
             let cancelled = false;
             const gameOverAt = Date.now();
-            // 終局（狼月等）＋淘汰相關：都要播完時長才開結算視窗
             const isEndFx = (f) => !!(f && (
               f.kind === 'wolfbite' || f.kind === 'vampire' || f.kind === 'score' ||
               (f.kind === 'moon' && (Number(f.phase) >= 3 || f.wolf === 'held')) ||
@@ -1928,8 +1927,8 @@
               f.kind === 'guess' || f.kind === 'ask' || f.kind === 'bounty' || f.kind === 'witch' ||
               f.stampText === '淘汰' || (f.reveals && f.reveals.length)
             ));
+            const stickEnd = (piece) => ({ ...piece, sticky: true, hold: 0 });
             const clearNonEndFx = () => {
-              // 只清非結束動畫；結束動畫保留給玩家點關
               fxQueueRef.current = fxQueueRef.current.filter(isEndFx);
               if (!isEndFx(fxCurRef.current)) {
                 clearTimeout(fxTimerRef.current);
@@ -1945,56 +1944,55 @@
               const cur = fxCurRef.current;
               const queueEnd = fxQueueRef.current.some(isEndFx);
               const elapsed = now - gameOverAt;
-              // 佇列還有結束相關動畫且當前時長已過 → 自動推進到下一筆結束動畫（不依賴點擊）
+              // 佇列還有結束動畫且時長已過 → 自動推進下一筆（強制 sticky）
               if (queueEnd && now >= until + 100) {
                 const nxt = fxQueueRef.current.findIndex(isEndFx);
                 if (nxt >= 0) {
                   const [piece] = fxQueueRef.current.splice(nxt, 1);
-                  if (piece && presentLocalFxRef.current) {
-                    // 強制 sticky：播完停住等人點
-                    presentLocalFxRef.current({ ...piece, sticky: true, hold: 0 });
-                  }
+                  if (piece && presentLocalFxRef.current) presentLocalFxRef.current(stickEnd(piece));
                 }
                 setTimeout(tryReady, 150);
                 return;
               }
-              // 結束相關動畫仍在播且時長未到 → 繼續等
+              // 結束動畫時長未到 → 等播完
               if ((isEndFx(cur) || queueEnd) && now < until + 250) {
                 setTimeout(tryReady, 120);
                 return;
               }
-              // 一般播放時長未到
               if (now < until + 250) {
                 setTimeout(tryReady, 120);
                 return;
               }
-              // 尚未收到結束動畫：給非房主寬限接收 fxEvent
+              // 尚未收到結束動畫：非房主寬限等 fxEvent
               if (!isEndFx(cur) && !queueEnd && elapsed < 4500) {
                 setTimeout(tryReady, 120);
                 return;
               }
-              // 時長到：開啟勝利視窗；不清掉結束動畫（sticky 等本機點關）
-              // 清空佇列避免後面又蓋上來；目前這筆結束動畫留著
+              // 時長已到：若仍有結束動畫 → 強制 sticky 停住，等本機點關（不自動開勝利視窗）
               fxQueueRef.current = [];
-              if (cur && isEndFx(cur) && !cur.sticky) {
-                // 確保結束動畫不會自動淡出
-                const stickyCur = { ...cur, sticky: true, hold: 0 };
-                fxCurRef.current = stickyCur;
-                fxShownRef.current = true;
-                setFx(stickyCur);
+              if (cur && isEndFx(cur)) {
+                if (!cur.sticky) {
+                  const stickyCur = stickEnd(cur);
+                  fxCurRef.current = stickyCur;
+                  fxShownRef.current = true;
+                  setFx(stickyCur);
+                }
+                // 等玩家點掉動畫（skipFx 會清 fx 並 setVictoryReady）
+                setTimeout(tryReady, 250);
+                return;
               }
+              // 無結束動畫（或已被點掉）→ 開勝利視窗
               setVictoryReady(true);
             };
             const t = setTimeout(() => {
               clearNonEndFx();
               tryReady();
             }, 400);
-            // 安全上限：最多約 16 秒強制開結算視窗（仍保留結束動畫等本機點；不擋其他人準備下一局）
+            // 安全上限：約 20 秒仍未點 → 強制開勝利視窗（本機），不擋其他人 nextReady
             const force = setTimeout(() => {
               if (cancelled) return;
-              fxQueueRef.current = [];
               setVictoryReady(true);
-            }, 16000);
+            }, 20000);
             return () => { cancelled = true; clearTimeout(t); clearTimeout(force); };
           }, [gameOver]);
           // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
@@ -2036,13 +2034,17 @@
             // 點擊只關閉本機目前動畫；有排隊則播下一個（不影響其他玩家、不改權威流程）
             const nxt = fxQueueRef.current.shift();
             if (nxt) {
-              presentLocalFx(nxt);
+              // 局末結束動畫維持 sticky，播完仍要點關
+              const piece = gameOverRef.current ? { ...nxt, sticky: true, hold: 0 } : nxt;
+              presentLocalFx(piece);
               return;
             }
             fxCurRef.current = null;
             fxShownRef.current = false;
             // 不強制清零 fxUntilRef：權威等待仍以各動作的 duration 為準
             setFx(null);
+            // 局末：點關最終結算動畫後再開勝利視窗（僅本機；不擋他人準備下一局）
+            if (gameOverRef.current) setVictoryReady(true);
             fastRef.current = true;
             [...waitersRef.current].forEach(w => w.run());
           };
