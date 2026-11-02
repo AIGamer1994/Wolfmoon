@@ -284,7 +284,7 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2100, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, wolfbite: 4300, vampire: 6500 };
+        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2100, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, alchemist: 3600, wolfbite: 4300, vampire: 6500 };
         // 被動牌打出時「沒有任何效果（原因）」的原因（動態廣播、行動紀錄、置於面前動畫共用）
         const PASSIVE_WHY = {
           '乞丐之王': '結算時才發動',
@@ -299,7 +299,7 @@
         const fxHold = (f) => (f && f.kind === 'place' ? 2000 : (f && f.kind === 'moon' ? 800 : 1000));
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
-        const FX_TOTAL_BY = { compare: 7000, grave: 4600, place: 4000, servant: 4000, drunk: 5000, wolfbite: 4300, vampire: 6500 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
+        const FX_TOTAL_BY = { compare: 7000, grave: 4600, place: 4000, servant: 4000, alchemist: 4200, drunk: 5000, wolfbite: 4300, vampire: 6500 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -369,6 +369,22 @@
           if (servantSource) {
             const ssrc = servantSource;
             return { key: `${Date.now()}-${Math.random()}`, kind: 'servant', card: { title: '僕人', value: 1, icon: 'fa-bell-concierge' }, src: ssrc, tgt: null, tone: 'ok', baseDur: FX_DURATION.servant, duration: FX_TOTAL_BY.servant };
+          }
+          // 煉金術士：遭遇淘汰後棄掉面前煉金術士並復活（動畫排在淘汰動畫之後）
+          const alchSource = orderedPlayers.find(p => action.startsWith(`${p.name} 遭遇淘汰`) || (action.startsWith(`${p.name} `) && /棄掉面前【煉金術士】/.test(res)));
+          if (alchSource && /煉金術士/.test(String(res || '') + String(action || ''))) {
+            return {
+              key: `${Date.now()}-${Math.random()}`,
+              kind: 'alchemist',
+              card: { title: '煉金術士', value: 8, icon: 'fa-flask' },
+              src: alchSource,
+              tgt: null,
+              tone: 'revive',
+              stampText: '復活',
+              stampTone: 'revive',
+              baseDur: FX_DURATION.alchemist,
+              duration: FX_TOTAL_BY.alchemist,
+            };
           }
           const takeOneSource = playerWithPrefix(' 執行【拿一還一】');
           if (takeOneSource) {
@@ -707,6 +723,38 @@
                 </div>
               </div>
             );
+          } else if (kind === 'alchemist') {
+            // 棄掉面前煉金術士 ➔ 復活（排在淘汰動畫之後播）
+            body = (
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="relative w-[220px] h-[150px]">
+                  <div className="absolute left-[40px] top-0" style={an('fxInL', 0.4, 0)}>
+                    <FxChip p={src} size="w-14 h-14 text-2xl" glow="ring-4 ring-emerald-400/70" />
+                  </div>
+                  <div className="absolute left-[48px] top-[90px] w-[40px] h-[54px] rounded-md border-2 border-dashed border-slate-500/70 flex items-end justify-center" style={an('fxFadeUp', 0.4, 0.25)}>
+                    <span className="text-[8px] text-slate-500 mb-0.5">面前</span>
+                  </div>
+                  <div className="absolute left-[40px] top-[78px] z-10" style={{ transform: 'scale(.65)' }}>
+                    <div style={an('fxPop', 0.35, 0.2)}>
+                      <div style={an('fxDiscard', 0.7, 1.0, 'ease-in')}><FxFace c={card} cls="w-14 h-[76px]" /></div>
+                    </div>
+                  </div>
+                  <span className="absolute left-[100px] top-[102px] px-1.5 py-0.5 rounded-full bg-rose-900/70 border border-rose-500/50 text-rose-200 text-[9px] font-black" style={{ animation: 'fxFadeUp .3s ease .4s both, fxOut .3s ease 1.05s forwards' }}>生效中</span>
+                  {stamp(2.0)}
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full bg-slate-800 border border-slate-500/70 text-slate-200 text-[10px] font-black" style={an('fxPop', 0.3, 1.7)}>
+                    <i className="fa-solid fa-flask mr-1 text-amber-300"></i>棄掉【煉金術士】
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-900/70 border border-emerald-500/60 text-emerald-200 text-[10px] font-black" style={an('fxPop', 0.3, 2.0)}>
+                    <i className="fa-solid fa-heart-pulse mr-1"></i>抽牌復活
+                  </span>
+                </div>
+                <div className="text-[10px] font-black text-emerald-300 text-center" style={an('fxFadeUp', 0.35, 2.2)}>
+                  死裡逃生！繼續存活
+                </div>
+              </div>
+            );
           } else if (kind === 'moon' || kind === 'wolfbite') {
             // 月亮升起：第 1 張彎月、第 2 張半月、第 3 張全月（天空一開始是黑的，月亮升起後才轉紅，狼月降臨）
             // wolfbite：第 3 張月亮之後，有人用拿一還一／守夜人把狼人留在手上 ➔ 直接是紅月，接著只播「咬向鏡頭」
@@ -981,11 +1029,13 @@
               </div>
             );
           } else if (kind === 'swap') {
-            // 上方：一律蓋牌交叉交換；下方：僅參與者（有 mine／swapMeta）顯示換出／換入
-            let mine = fx.mine;
-            if (!mine && fx.swapMeta && Array.isArray(fx.swapMeta.parties)) {
+            // 上方：一律蓋牌交叉交換；下方：僅參與者顯示換出／換入（優先依本機玩家從 swapMeta 解析）
+            let mine = null;
+            if (fx.swapMeta && Array.isArray(fx.swapMeta.parties)) {
               const me = fx.swapMeta.parties.find(p => p.id === localPlayerId);
               if (me && me.out && me.in) mine = { out: me.out, in: me.in };
+            } else if (fx.mine) {
+              mine = fx.mine;
             }
             body = (
               <div className="flex flex-col items-center gap-2">
@@ -1019,10 +1069,13 @@
               const a = (-90 + (360 / n) * i) * Math.PI / 180;
               return { x: Math.round(Math.cos(a) * 88), y: Math.round(Math.sin(a) * 60) };
             };
-            let drunkMine = fx.mine;
-            if (!drunkMine && fx.drunkMeta && Array.isArray(fx.drunkMeta.parties)) {
+            // 優先依本機玩家從 drunkMeta 解析換出／換入，避免線上同步時全員看到出牌者的牌面
+            let drunkMine = null;
+            if (fx.drunkMeta && Array.isArray(fx.drunkMeta.parties)) {
               const me = fx.drunkMeta.parties.find(p => p.id === localPlayerId);
               if (me && (me.out || me.in)) drunkMine = { out: me.out, in: me.in };
+            } else if (fx.mine) {
+              drunkMine = fx.mine;
             }
             body = (
               <div className="flex flex-col items-center gap-1">
@@ -1313,7 +1366,7 @@
         };
 
         function App() {
-          const [version] = useState('v0.1.9 M');
+          const [version] = useState('v0.1.18 M');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => safeStorageGet('wolfmoon.displayName') || '');
           const [firebaseUser, setFirebaseUser] = useState(null);
@@ -1478,8 +1531,8 @@
           };
 
           const makeRoomCode = () => {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            return Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+            // 6 位純數字（100000–999999）
+            return String(Math.floor(100000 + Math.random() * 900000));
           };
 
           const createRoom = async () => {
@@ -1520,9 +1573,9 @@
               setLobbyError('Firebase 尚未連線，請稍後再試。');
               return;
             }
-            const code = roomInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-            if (!/^[A-Z0-9]{6}$/.test(code)) {
-              setLobbyError('房間號碼需為 6 位英數字。');
+            const code = roomInput.trim().replace(/\D/g, '');
+            if (!/^\d{6}$/.test(code)) {
+              setLobbyError('房間號碼需為 6 位數字。');
               return;
             }
             setLobbyBusy(true);
@@ -1797,8 +1850,12 @@
             const sharedPublic = publicFx
               ? { ...publicFx, key: f.key, duration: f.duration, hold: f.hold, sticky }
               : (f.privateTo?.length ? null : { ...f, key: f.key, duration: f.duration, hold: f.hold, sticky });
+            // 私密動畫同步時不帶 mine：每位客戶端依 drunkMeta／swapMeta + 自己的 localPlayerId 解析換出／換入，避免全員看到出牌者的牌面
             const sharedPrivate = f.privateTo?.length
-              ? { ...f, key: f.key, duration: f.duration, hold: f.hold, sticky, privateTo: f.privateTo }
+              ? (() => {
+                  const { mine: _omitMine, ...rest } = f;
+                  return { ...rest, key: f.key, duration: f.duration, hold: f.hold, sticky, privateTo: f.privateTo };
+                })()
               : null;
             // 權威流程計時：永遠以「這次動作」的播放時長為準（與本機是否排隊無關）
             fxUntilRef.current = Date.now() + f.duration;
@@ -1823,11 +1880,23 @@
             }
             presentLocalFx(f);
           };
+          // 遊戲結束畫面：等本機動畫播完（時長 + 佇列清空 + sticky 點掉）才顯示
           useEffect(() => {
             if (!gameOver) { setVictoryReady(false); return; }
-            if (fx) return;
-            const t = setTimeout(() => setVictoryReady(true), 400);
-            return () => clearTimeout(t);
+            let cancelled = false;
+            const tryReady = () => {
+              if (cancelled) return;
+              const playing = !!(fxCurRef.current || fxQueueRef.current.length > 0 || fx);
+              const until = fxUntilRef.current || 0;
+              if (playing || Date.now() < until + 200) {
+                setTimeout(tryReady, 120);
+                return;
+              }
+              setVictoryReady(true);
+            };
+            // 至少留一點緩衝，避免結算當幀立刻跳出
+            const t = setTimeout(tryReady, 500);
+            return () => { cancelled = true; clearTimeout(t); };
           }, [gameOver, fx]);
           // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
           const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
@@ -2214,6 +2283,39 @@
             initGame(INITIAL_PLAYERS);
           }, [screen, onlineSession, roomData && roomData.round, roomData && roomData.hostUid, firebaseUser]);
 
+          // 新局／開局：gameState 為 null 時，僅非房主重置 revision 並等待；房主由 initGame 負責，避免清掉剛初始化的牌局
+          useEffect(() => {
+            if (!onlineSession || screen !== 'game' || !roomData || !firebaseUser) return;
+            if (roomData.gameState) return;
+            if (roomData.hostUid === firebaseUser.uid) return;
+            gameRevisionRef.current = 0;
+            lastActorUidRef.current = null;
+            gameOverRef.current = false;
+            clearTimeout(fxTimerRef.current);
+            fxUntilRef.current = 0;
+            fxQueueRef.current = [];
+            fxCurRef.current = null;
+            fxShownRef.current = false;
+            lockRef.current = false;
+            ReactDOM.unstable_batchedUpdates(() => {
+              setGameReady(false);
+              setGameOver(false);
+              setWinnerInfo(null);
+              setVictoryReady(false);
+              setVictoryDismissed(false);
+              setFx(null);
+              setReplay(null);
+              setActionLocked(false);
+              setInteractionModal(null);
+              setPlayers([]);
+              setPlayerHands({});
+              setBroadcastAction('正在同步牌局…');
+              setBroadcastResult('➔ 等待房主發牌');
+              setBroadcastPrivate(null);
+              setHistoryLogs([]);
+            });
+          }, [onlineSession, screen, roomData && !roomData.gameState, roomData && roomData.round, roomData && roomData.hostUid, firebaseUser]);
+
           useEffect(() => {
             const snapshot = roomData && roomData.gameState;
             if (!onlineSession || screen !== 'game' || !firebaseUser || !snapshot) return;
@@ -2245,6 +2347,7 @@
             applyingRemoteGameRef.current = true;
             gameOverRef.current = !!snapshot.gameOver;
             winsRef.current = snapshot.wins || {};
+            lockRef.current = false;
             stateRef.current = {
               players: normalizedPlayers,
               playerHands: snapshot.playerHands || {},
@@ -2282,6 +2385,7 @@
               setWinnerInfo(snapshot.winnerInfo || null);
               setWins(snapshot.wins || {});
               setVictoryDismissed(!!snapshot.victoryDismissed);
+              setActionLocked(false);
               setGameReady(true);
             });
           }, [roomData && roomData.gameState, screen, onlineSession, firebaseUser]);
@@ -2393,8 +2497,9 @@
             if (killerId !== null && killerId !== targetId) {
               const hasAlchemist = playedCardsOf(target).some(c => c && c.title === '煉金術士');
               if (hasAlchemist) {
-                // 先紀錄復活，再抽牌（歷史新→舊：抽牌在上、復活在下；由下往上讀為先復活再抽牌）
+                // 淘汰動畫已由牌效 log 啟動；此處再 queue 煉金術士棄牌復活動畫（排在淘汰之後）
                 setPlayers(prev => prev.map(p => p.id === targetId ? { ...p, playedCards: [...playedCardsOf(p).filter(c => c && c.title !== '煉金術士'), ...(keepHand ? [] : targetHand)] } : p));
+                setBroadcastEvent({ type: 'revive', key: `${Date.now()}-${Math.random()}` });
                 logActionAndResult(`${target.name} 遭遇淘汰`, `棄掉面前【煉金術士】抽牌復活！`, target.name, 'revive');
                 const drawn = drawCardForPlayer(targetId, false) || st.reserveCards[0];
                 setHandNow(targetId, drawn ? [drawn] : []);
@@ -3013,9 +3118,10 @@
               skipped: skipped.map(p => p.name),
             };
             const privateTo = participants.map(p => p.id);
+            // 結果字串用公開摘要；各玩家的換出／換入由 drunkMeta 在本機個人化（動畫、動態、紀錄）
             logActionAndResult(
               `${source.name} 打出了(1)【醉漢】重洗手牌`,
-              formatDrunkResultForViewer(publicResult, drunkMeta, humanPlayerId),
+              publicResult,
               source.name,
               null,
               '',
@@ -3051,12 +3157,12 @@
 
               case 'BODYGUARD':
                 logActionAndResult(`${source.name} 打出了(4)【保鏢】獲得保護`, '免役牌效直至下個回合', source.name);
-                advanceTurn();
+                advanceAfterPassive();
                 break;
 
               case 'SERVANT':
                 logActionAndResult(`${source.name} 打出了(1)【僕人】`, '置於面前 ➔ 回合結束時可棄掉換額外回合', source.name);
-                advanceTurn();
+                advanceAfterPassive();
                 break;
 
               case 'PASSIVE': {
@@ -3066,7 +3172,8 @@
                   passiveWhy ? `沒有任何效果（${passiveWhy}）` : '無任何效果',
                   source.name
                 );
-                advanceTurn();
+                // 被動牌：畫面可 sticky 等人點；AI 流程只等動畫時長後換人
+                advanceAfterPassive();
                 break;
               }
 
@@ -3100,17 +3207,39 @@
               case 'BOUNTY_HUNTER':
               case 'GRAVEDIGGER':
               case 'NIGHT_WATCHMAN': {
-                if (card.type === 'WITCH' && sourceId === humanPlayerId && !stateRef.current.players.some(p => p.status === '出局')) {
-                  logActionAndResult('你 打出了(4)【女巫】', '沒有任何效果（場上無人可復活）', '你');
-                  advanceTurn();
-                  break;
-                }
-                if (card.type === 'PICKPOCKET' && sourceId === humanPlayerId && !stateRef.current.players.some(p => p.id !== humanPlayerId && p.status === '存活' && !p.protected)) {
-                  logActionAndResult('你 打出了(6)【扒手】', '沒有任何效果（可選對手不足）', '你');
-                  advanceTurn();
-                  break;
-                }
                 if (sourceId === humanPlayerId) {
+                  const stH = stateRef.current;
+                  const plist = stH.players || [];
+                  const aliveOpp = plist.filter(p => p.id !== sourceId && p.status === '存活' && !p.protected);
+                  const deadAll = plist.filter(p => p.status === '出局');
+                  const gravePool = plist.filter(p => (p.id === sourceId || !p.protected) && playedCardsOf(p).some(canSteal));
+                  const needsTarget = !['NIGHT_WATCHMAN'].includes(card.type);
+                  let validTargets = aliveOpp;
+                  if (card.type === 'WITCH') validTargets = deadAll;
+                  else if (card.type === 'BOUNTY_HUNTER') validTargets = [plist.find(p => p.id === sourceId), ...aliveOpp].filter(Boolean);
+                  else if (card.type === 'GRAVEDIGGER') validTargets = gravePool;
+                  else if (card.type === 'PICKPOCKET' || card.type === 'SWAP_HAND') {
+                    // 扒手需至少 2 個可參與者（可含自己）
+                    validTargets = [plist.find(p => p.id === sourceId), ...aliveOpp].filter(Boolean);
+                  }
+
+                  if (needsTarget && card.type === 'PICKPOCKET') {
+                    if (validTargets.length < 2) {
+                      logActionAndResult(`你 打出了(${card.value})【${card.title}】`, '沒有任何效果（沒有可選擇目標）', '你');
+                      advanceTurn();
+                      break;
+                    }
+                  } else if (needsTarget && validTargets.length === 0) {
+                    logActionAndResult(`你 打出了(${card.value})【${card.title}】`, '沒有任何效果（沒有可選擇目標）', '你');
+                    advanceTurn();
+                    break;
+                  }
+
+                  // 只剩 1 個可選目標：仍開確認彈窗，但跳過頭像選擇（預填唯一目標）
+                  if (needsTarget && validTargets.length === 1 && card.type !== 'PICKPOCKET' && card.type !== 'NIGHT_WATCHMAN') {
+                    setInteractionModal({ type: card.type, card, preselectTargetId: validTargets[0].id });
+                    break;
+                  }
                   setInteractionModal({ type: card.type, card });
                 } else {
                   handleAIEffectSelection(sourceId, card);
@@ -3121,7 +3250,7 @@
               default: {
                 const passiveWhy = PASSIVE_WHY[card.title] || '';
                 logActionAndResult(`${source.name} 打出了(${card.value})【${card.title}】`, passiveWhy ? `沒有任何效果（${passiveWhy}）` : '無任何效果', source.name);
-                advanceTurn();
+                advanceAfterPassive();
                 break;
               }
             }
@@ -3180,7 +3309,7 @@
                   else advanceTurn();
                 }, 3000 * slow());
               } else {
-                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【掘墓人】`, '沒有任何效果（場上無卡牌可選）', sourcePlayer.name);
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【掘墓人】`, '沒有任何效果（沒有可選擇目標）', sourcePlayer.name);
                 advanceTurn();
               }
               return;
@@ -3190,7 +3319,7 @@
               // 扒手可指定自己：候選＝所有存活且未受保護的對手＋出牌者自己
               const pickPool = [sourcePlayer, ...aliveTargets];
               if (pickPool.length < 2) {
-                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, '沒有任何效果（可選對手不足）', sourcePlayer.name);
+                logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【扒手】`, '沒有任何效果（沒有可選擇目標）', sourcePlayer.name);
               } else {
                 const [a, b] = shuffle(pickPool);
                 const handsNow = stNow.playerHands || playerHands;
@@ -3213,7 +3342,7 @@
             }
 
             if (aliveTargets.length === 0) {
-              logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【${card.title}】`, '沒有任何效果（場面無有效目標）', sourcePlayer.name);
+              logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【${card.title}】`, '沒有任何效果（沒有可選擇目標）', sourcePlayer.name);
               advanceTurn();
               return;
             }
@@ -3342,7 +3471,7 @@
                   setWitchTargetOwner({ witchOwnerId: sourceId, targetId: reviveP.id });
                   logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, `復活了 ${reviveP.name} ➔ 綁定共同勝利`, sourcePlayer.name, 'revive');
                 } else {
-                  logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, '沒有任何效果（場上無人可復活）', sourcePlayer.name);
+                  logActionAndResult(`${sourcePlayer.name} 打出了(${card.value})【女巫】`, '沒有任何效果（沒有可選擇目標）', sourcePlayer.name);
                 }
                 advanceTurn();
                 break;
@@ -3456,7 +3585,7 @@
                 setSelectedHandCard(null);
                 setBroadcastResult('➔ 請拖曳 1 張手牌到戰場打出');
               } else {
-                logActionAndResult('你 打出了(6)【掘墓人】', '沒有任何效果（場面無可奪取之卡牌）', '你');
+                logActionAndResult('你 打出了(6)【掘墓人】', '沒有任何效果（沒有可選擇目標）', '你');
                 advanceTurn();
               }
             } else if (type === 'BOUNTY_HUNTER') {
@@ -3582,7 +3711,7 @@
                 setWitchTargetOwner({ witchOwnerId: humanPlayerId, targetId });
                 logActionAndResult(`你 打出了(4)【女巫】`, `復活了 ${target.name} ➔ 綁定共同勝利`, '你', 'revive');
               } else {
-                logActionAndResult('你 打出了(4)【女巫】', '沒有任何效果（場上無人可復活）', '你');
+                logActionAndResult('你 打出了(4)【女巫】', '沒有任何效果（沒有可選擇目標）', '你');
               }
               advanceTurn();
             } else if (type === 'COUNTER_SPY') {
@@ -3619,7 +3748,7 @@
             setCurrentTurnIndex(nextIdx);
             setTurnTick(t => t + 1);
           };
-          // 換人時一律解鎖，避免出牌（如吸血鬼無效）後 actionLocked 卡住無法抽牌
+          // 換人時一律解鎖，避免出牌後 actionLocked 卡住無法抽牌
           useEffect(() => {
             lockRef.current = false;
             setActionLocked(false);
@@ -3647,14 +3776,13 @@
                 : active.uid !== (firebaseUser && firebaseUser.uid)
             )) return;
             // AI 出牌後多留時間給玩家看動畫；人類出牌後較短
+            // 注意：只等動畫 duration（whenFxDone），不等人點 sticky；點擊只影響本機畫面
             const baseDelay = (st0.players[st0.currentTurnIndex]?.isAI ? 4200 : 1000) * slow();
-            // 有效果動畫在播時，等動畫播完再換人
             whenFxDone(() => {
-              // 先解鎖，避免本機卡在「已出牌、尚未換人」
               lockRef.current = false;
               setActionLocked(false);
               if (gameOverRef.current) return;
-              reserveDrawRef.current = null; // 回合結束：備用牌抽牌的豁免到此為止，牌庫已空即結算
+              reserveDrawRef.current = null;
               if (checkWinConditions()) return;
               const st = stateRef.current;
               const cur = st.players[st.currentTurnIndex];
@@ -3668,6 +3796,37 @@
               }
               proceedToNext();
             }, baseDelay);
+          };
+
+          // 被動／置於面前類：動畫可 sticky 等人點，但 AI 換人必須依時長推進（不依賴點擊）
+          // 換人前保持鎖定，避免出牌後還能再按「抽一打一」
+          const advanceAfterPassive = () => {
+            lockRef.current = true;
+            setActionLocked(true);
+            const st0 = stateRef.current;
+            const active = st0.players[st0.currentTurnIndex];
+            const isAi = !!(active && active.isAI);
+            if (onlineSession && active && (
+              isAi
+                ? !roomData || roomData.hostUid !== (firebaseUser && firebaseUser.uid)
+                : active.uid !== (firebaseUser && firebaseUser.uid)
+            )) return;
+            // AI 被動牌：等動畫時長後立刻換人（略短於一般 AI 延遲，避免像卡死）
+            const delay = (isAi ? 2800 : 1000) * slow();
+            whenFxDone(() => {
+              if (gameOverRef.current) {
+                lockRef.current = false;
+                setActionLocked(false);
+                return;
+              }
+              reserveDrawRef.current = null;
+              if (checkWinConditions()) {
+                lockRef.current = false;
+                setActionLocked(false);
+                return;
+              }
+              proceedToNext(); // 內部會解鎖
+            }, delay);
           };
 
           useEffect(() => {
@@ -3691,17 +3850,20 @@
             if (currentPlayer.isAI) {
               if (onlineSession && (!roomData || roomData.hostUid !== (firebaseUser && firebaseUser.uid))) return;
               if (pausedRef.current) { pendingAiRef.current = true; return; }
+              // AI 行動只等動畫 duration，不等人點 sticky；點擊只清畫面
               const cancelAiWait = whenFxDone(async () => {
                 if (pausedRef.current) { pendingAiRef.current = true; return; }
                 pendingAiRef.current = false;
                 const myToken = ++aiRunRef.current;
-                const stale = () => gameOverRef.current || aiRunRef.current !== myToken;
+                const stale = () => gameOverRef.current || aiRunRef.current !== myToken || stateRef.current.currentTurnIndex !== currentTurnIndex;
                 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
                 const pid = currentPlayer.id;
+                if (stale()) return;
 
                 let hand = (stateRef.current.playerHands[pid] || []).filter(Boolean);
                 let drawnCard = null;
                 while (hand.length < 2 && stateRef.current.deck.length > 0) {
+                  if (stale()) return;
                   if (hand.length === 1 && stateRef.current.centerCards.some(Boolean) && Math.random() < 0.25) {
                     aiCenterSwap(pid);
                     return;
@@ -3710,8 +3872,7 @@
                   if (result.gameEnded || gameOverRef.current) return;
                   if (result.card) { drawnCard = result.card; break; }
                   if (result.moon) {
-                    // 月亮牌展示停留 3 秒，讓玩家看清楚，再抽下一張
-                    await new Promise(r => whenFxDone(r, 1500 * slow()));  // 等月亮動畫播完
+                    await new Promise(r => whenFxDone(r, 1500 * slow()));
                     while (pausedRef.current && !stale()) await sleep(300);
                     if (stale()) return;
                     continue;
@@ -3720,7 +3881,6 @@
                 }
 
                 if (!drawnCard && hand.length < 2 && reserveDrawRef.current === pid && stateRef.current.deck.length === 0) {
-                  // 牌庫最後一張月亮翻開後，AI 的抽牌改從備用牌隨機抽 1 張
                   const rc = drawReserveCard();
                   if (rc) {
                     const nm = stateRef.current.players.find(p => p.id === pid).name;
@@ -3729,6 +3889,7 @@
                   }
                 }
 
+                if (stale()) return;
                 if (drawnCard) {
                   hand = [...hand, drawnCard];
                   setHandNow(pid, hand);
@@ -3741,7 +3902,7 @@
                 } else {
                   advanceTurn();
                 }
-              }, 500 * slow(), true); // 出牌前思考時間縮短
+              }, 500 * slow(), true);
 
               return () => cancelAiWait();
             }
@@ -3786,31 +3947,16 @@
               return;
             }
             if (nextGameBusy) return;
+            // 任何仍在房間的真人（含已出局）皆可準備；只寫入自己的 nextReady/{uid}，避免非房主對整房 transaction 被 rules 拒絕
+            const myUid = firebaseUser.uid;
+            if (!(roomData.players || {})[myUid]) {
+              setLobbyError('你不在此房間，無法準備下一局。');
+              return;
+            }
+            if ((roomData.nextReady || {})[myUid]) return;
             setNextGameBusy(true);
             try {
-              const myUid = firebaseUser.uid;
-              const result = await roomRef.current.transaction(current => {
-                if (!current || current.status !== 'playing') return;
-                const humans = Object.keys(current.players || {});
-                if (!humans.includes(myUid)) return;
-                const nextReady = { ...(current.nextReady || {}), [myUid]: true };
-                const allReady = humans.length > 0 && humans.every(uid => nextReady[uid]);
-                if (!allReady) {
-                  return { ...current, nextReady };
-                }
-                return {
-                  ...current,
-                  nextReady: null,
-                  round: (current.round || 0) + 1,
-                  gameState: null,
-                };
-              });
-              if (!result.committed) throw new Error('房間狀態已變更，請重新整理後再試。');
-              const after = result.snapshot && result.snapshot.val();
-              if (after && !after.gameState && winnerInfo && winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) {
-                winsRef.current = {};
-                setWins({});
-              }
+              await firebase.database().ref(`rooms/${roomCode}/nextReady/${myUid}`).set(true);
             } catch (error) {
               setLobbyError(`準備下一局失敗：${error.message}`);
               setBroadcastAction('無法準備下一局');
@@ -3819,6 +3965,49 @@
               setNextGameBusy(false);
             }
           };
+
+          // 房主偵測全員準備後開新局（僅房主可寫房間根欄位 round／gameState）
+          useEffect(() => {
+            if (!onlineSession || !roomData || !firebaseUser || !roomRef.current || !roomCode) return;
+            if (roomData.hostUid !== firebaseUser.uid) return;
+            if (roomData.status !== 'playing') return;
+            const humans = Object.keys(roomData.players || {});
+            if (!humans.length) return;
+            const nextReady = roomData.nextReady || {};
+            if (!humans.every(uid => nextReady[uid])) return;
+            let cancelled = false;
+            (async () => {
+              try {
+                const result = await roomRef.current.transaction(current => {
+                  if (!current || current.status !== 'playing') return;
+                  const h = Object.keys(current.players || {});
+                  if (!h.length) return;
+                  const nr = current.nextReady || {};
+                  if (!h.every(uid => nr[uid])) return;
+                  return {
+                    ...current,
+                    nextReady: null,
+                    round: (current.round || 0) + 1,
+                    gameState: null,
+                  };
+                });
+                if (cancelled) return;
+                if (result.committed) {
+                  const after = result.snapshot && result.snapshot.val();
+                  if (after && !after.gameState && winnerInfo && winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) {
+                    winsRef.current = {};
+                    setWins({});
+                  }
+                }
+              } catch (error) {
+                if (!cancelled) {
+                  console.error('開下一局失敗：', error);
+                  setLobbyError(`開下一局失敗：${error.message}`);
+                }
+              }
+            })();
+            return () => { cancelled = true; };
+          }, [onlineSession, roomCode, firebaseUser, roomData && roomData.hostUid, roomData && roomData.status, roomData && roomData.nextReady, roomData && roomData.players]);
           const onlineHumans = roomData ? Object.keys(roomData.players || {}) : [];
           const nextReadyMap = (roomData && roomData.nextReady) || {};
           const iAmReadyNext = !!(firebaseUser && nextReadyMap[firebaseUser.uid]);
@@ -3883,9 +4072,11 @@
                         <div className="flex gap-2">
                           <input
                             value={roomInput}
-                            onChange={event => { setRoomInput(event.target.value.toUpperCase()); setLobbyError(''); }}
+                            onChange={event => { setRoomInput(event.target.value.replace(/\D/g, '').slice(0, 6)); setLobbyError(''); }}
                             maxLength={6}
-                            placeholder="6 位房間號碼"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            placeholder="6 位數字房間號碼"
                             aria-label="房間號碼"
                             className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-center font-mono text-lg tracking-[0.3em] text-white outline-none focus:border-cyan-400"
                           />
@@ -3917,7 +4108,21 @@
                           <h2 className="text-sm font-black text-white">等待大廳</h2>
                           <span className={`text-xs font-black ${totalPlayers >= 3 ? 'text-emerald-300' : 'text-amber-300'}`}>{totalPlayers} / 6 人</span>
                         </div>
-                        <div className="mt-2 space-y-2">
+                        {/* AI 調整固定在名單上方，避免增減時按鈕跟著下移 */}
+                        {isHost && roomData.status === 'lobby' && (
+                          <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-700 p-3">
+                            <div>
+                              <div className="text-xs font-bold">AI 玩家</div>
+                              <div className="text-[10px] text-slate-400">總玩家數需為 3–6 人</div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button onClick={() => updateAiCount(-1)} disabled={aiCount <= 0} className="h-8 w-8 rounded-lg bg-slate-700 font-black disabled:opacity-30" aria-label="減少 AI">−</button>
+                              <span className="w-4 text-center font-mono font-black">{aiCount}</span>
+                              <button onClick={() => updateAiCount(1)} disabled={totalPlayers >= 6} className="h-8 w-8 rounded-lg bg-slate-700 font-black disabled:opacity-30" aria-label="增加 AI">＋</button>
+                            </div>
+                          </div>
+                        )}
+                        <div className="mt-2 space-y-2 max-h-[40vh] overflow-y-auto pr-0.5 scrollbar-none">
                           {humans.map(person => (
                             <div key={person.uid} className="flex items-center justify-between rounded-lg bg-slate-800/70 px-3 py-2 text-sm">
                               <span className="truncate">{person.name}</span>
@@ -3931,17 +4136,7 @@
                           ))}
                         </div>
                         {isHost && roomData.status === 'lobby' && (
-                          <>
-                            <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-700 p-3">
-                              <div><div className="text-xs font-bold">AI 玩家</div><div className="text-[10px] text-slate-400">總玩家數需為 3–6 人</div></div>
-                              <div className="flex items-center gap-3">
-                                <button onClick={() => updateAiCount(-1)} disabled={aiCount <= 0} className="h-8 w-8 rounded-lg bg-slate-700 font-black disabled:opacity-30" aria-label="減少 AI">−</button>
-                                <span className="w-4 text-center font-mono font-black">{aiCount}</span>
-                                <button onClick={() => updateAiCount(1)} disabled={totalPlayers >= 6} className="h-8 w-8 rounded-lg bg-slate-700 font-black disabled:opacity-30" aria-label="增加 AI">＋</button>
-                              </div>
-                            </div>
-                            <button onClick={startOnlineGame} disabled={totalPlayers < 3 || totalPlayers > 6} className="w-full mt-4 rounded-xl bg-emerald-500 py-3 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">開始遊戲</button>
-                          </>
+                          <button onClick={startOnlineGame} disabled={totalPlayers < 3 || totalPlayers > 6} className="w-full mt-4 rounded-xl bg-emerald-500 py-3 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">開始遊戲</button>
                         )}
                         {roomData.status === 'playing' && (
                           <div className="mt-4 space-y-2">
@@ -3972,7 +4167,14 @@
 
           const privateBroadcastVisible = !!(broadcastPrivate && broadcastPrivate.playerIds?.includes(humanPlayerId));
           const visibleBroadcastAction = privateBroadcastVisible ? broadcastPrivate.action : broadcastAction;
-          const visibleBroadcastResult = privateBroadcastVisible ? broadcastPrivate.result : broadcastResult;
+          // 動態私密行依本機玩家從 swapMeta／drunkMeta 重新組裝，避免同步到出牌者個人化後的「你換出／換入」
+          const visibleBroadcastResult = privateBroadcastVisible
+            ? (broadcastPrivate.drunkMeta
+                ? `➔ ${formatDrunkResultForViewer(String(broadcastPrivate.result || '').replace(/^➔\s*/, '').split('｜')[0], broadcastPrivate.drunkMeta, humanPlayerId)}`
+                : broadcastPrivate.swapMeta
+                  ? `➔ ${formatSwapResultForViewer(String(broadcastPrivate.result || '').replace(/^➔\s*/, '').split('｜')[0], broadcastPrivate.swapMeta, humanPlayerId)}`
+                  : broadcastPrivate.result)
+            : broadcastResult;
           const visibleBroadcastReveal = privateBroadcastVisible ? broadcastPrivate.reveal : broadcastReveal;
           const visibleWatchNote = watchNote?.byPlayer
             ? watchNote.byPlayer[humanPlayerId] || null
@@ -3998,6 +4200,22 @@
               isPrivateForViewer: !!privateView,
             };
           });
+
+          // 線上模式尚未收到牌局：顯示等待，避免誤顯示預設 6 人 AI 空桌
+          if (onlineSession && !gameReady) {
+            return (
+              <div className="min-h-[100dvh] h-[100dvh] w-screen flex flex-col items-center justify-center bg-slate-950 text-slate-100 p-6 text-center">
+                <div className="text-4xl mb-3 animate-pulse">🌙</div>
+                <p className="text-sm font-black text-amber-300 mb-1">正在同步牌局…</p>
+                <p className="text-[11px] text-slate-400 mb-4">等待房主發牌與狀態同步</p>
+                <p className="text-[10px] font-mono text-cyan-400/80 mb-6">{version}{roomCode ? ` · 房 ${roomCode}` : ''}</p>
+                <button
+                  onClick={() => setScreen('lobby')}
+                  className="rounded-xl border border-slate-600 bg-slate-900 px-4 py-2 text-xs font-bold text-slate-300"
+                >返回大廳</button>
+              </div>
+            );
+          }
 
           return (
             <div className="min-h-[100dvh] h-[100dvh] w-screen flex flex-col justify-between overflow-hidden bg-slate-950 text-slate-100 select-none touch-manipulation pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
@@ -4900,15 +5118,51 @@
         }
 
         function InteractionDialog({ modal, players, humanPlayerId, playerHands, centerCards, remainingCounts, allCards, onSubmit, onCancel }) {
-          const [selectedTarget, setSelectedTarget] = useState('');
+          const preId = modal && modal.preselectTargetId != null ? String(modal.preselectTargetId) : '';
+          const [selectedTarget, setSelectedTarget] = useState(preId);
           const [secondaryTarget, setSecondaryTarget] = useState('');
-          const [guessedVal, setGuessedVal] = useState('0');
-          const [guessedVal2, setGuessedVal2] = useState('1');
+          const [guessedVal, setGuessedVal] = useState('');
+          const [guessedVal2, setGuessedVal2] = useState('');
           const [selectedStolenCard, setSelectedStolenCard] = useState('');
           const [selectedKeepCard, setSelectedKeepCard] = useState('');
 
           const aliveTargets = players.filter(p => p.id !== humanPlayerId && p.status === '存活' && !p.protected);
           const deadTargets = players.filter(p => p.status === '出局');
+          const preselectOnly = !!preId;
+          const prePlayer = preId ? players.find(p => String(p.id) === preId) : null;
+          const pickpocketPool = [players.find(p => p.id === humanPlayerId), ...aliveTargets].filter(Boolean).slice(0, 6);
+          const togglePickpocket = (idStr) => {
+            if (selectedTarget === idStr) {
+              setSelectedTarget(secondaryTarget);
+              setSecondaryTarget('');
+              return;
+            }
+            if (secondaryTarget === idStr) {
+              setSecondaryTarget('');
+              return;
+            }
+            if (!selectedTarget) setSelectedTarget(idStr);
+            else if (!secondaryTarget) setSecondaryTarget(idStr);
+            else {
+              // 已選滿兩個：以新點替換第二個
+              setSecondaryTarget(idStr);
+            }
+          };
+          // 刺客雙猜測：與扒手相同邏輯（第1下／第2下，再點取消）
+          const toggleAssassinGuess = (vStr) => {
+            if (guessedVal === vStr) {
+              setGuessedVal(guessedVal2);
+              setGuessedVal2('');
+              return;
+            }
+            if (guessedVal2 === vStr) {
+              setGuessedVal2('');
+              return;
+            }
+            if (!guessedVal) setGuessedVal(vStr);
+            else if (!guessedVal2) setGuessedVal2(vStr);
+            else setGuessedVal2(vStr);
+          };
 
           const isGuess = modal.type === 'VILLAGER' || modal.type === 'ASSASSIN';
 
@@ -5038,31 +5292,110 @@
                         </div>
                       </div>
                     ) : modal.type === 'WITCH' ? (
-                      <PlayerPicker label="選擇復活玩家：" value={selectedTarget} onChange={setSelectedTarget} options={deadTargets} humanPlayerId={humanPlayerId} />
+                      preselectOnly && prePlayer ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-950/30 px-2 py-1.5">
+                          <LocalPlayerContext.Provider value={humanPlayerId}><FxChip p={prePlayer} size="w-9 h-9 text-base" /></LocalPlayerContext.Provider>
+                          <div className="text-[11px] font-bold text-emerald-200">目標：{prePlayer.name}（唯一可選）</div>
+                        </div>
+                      ) : (
+                        <PlayerPicker label="選擇復活玩家：" value={selectedTarget} onChange={setSelectedTarget} options={deadTargets} humanPlayerId={humanPlayerId} />
+                      )
                     ) : modal.type === 'PICKPOCKET' ? (
-                      <>
-                        <PlayerPicker label="選擇目標玩家 1（可選自己）：" value={selectedTarget} onChange={v => { setSelectedTarget(v); if (v === secondaryTarget) setSecondaryTarget(''); }} options={[players.find(p => p.id === humanPlayerId), ...aliveTargets].filter(Boolean)} humanPlayerId={humanPlayerId} />
-                        <PlayerPicker label="選擇目標玩家 2（可選自己）：" value={secondaryTarget} onChange={setSecondaryTarget} options={[players.find(p => p.id === humanPlayerId), ...aliveTargets].filter(Boolean).filter(p => p.id.toString() !== selectedTarget)} humanPlayerId={humanPlayerId} />
-                      </>
+                      <div>
+                        <label className="block text-slate-400 mb-1">點選兩位目標（可含自己；再點同一人可取消）</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {pickpocketPool.map(p => {
+                            const idStr = String(p.id);
+                            const slot = selectedTarget === idStr ? 1 : secondaryTarget === idStr ? 2 : 0;
+                            return (
+                              <button
+                                type="button"
+                                key={p.id}
+                                onClick={() => togglePickpocket(idStr)}
+                                className={`relative flex flex-col items-center rounded-lg border py-1.5 active:scale-95 ${
+                                  slot ? 'border-emerald-400 bg-emerald-500/20 ring-2 ring-emerald-400/60' : 'border-slate-700 bg-slate-800'
+                                }`}
+                              >
+                                {slot > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-emerald-500 text-[10px] font-black text-slate-950 flex items-center justify-center shadow">{slot}</span>
+                                )}
+                                <Avatar p={p} size="w-9 h-9" />
+                                <span className={`text-[10px] font-bold mt-0.5 truncate max-w-full px-0.5 ${p.id === humanPlayerId ? 'text-sky-300' : 'text-slate-200'}`}>{p.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-1.5 text-[10px] text-slate-500">
+                          {selectedTarget && secondaryTarget
+                            ? `已選：${players.find(p => String(p.id) === selectedTarget)?.name || '?'} ↔ ${players.find(p => String(p.id) === secondaryTarget)?.name || '?'}`
+                            : selectedTarget
+                              ? `已選第 1 位，請再選第 2 位`
+                              : '請選擇兩位玩家互換手牌'}
+                        </div>
+                      </div>
+                    ) : preselectOnly && prePlayer ? (
+                      <div className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-950/30 px-2 py-1.5">
+                        <LocalPlayerContext.Provider value={humanPlayerId}><FxChip p={prePlayer} size="w-9 h-9 text-base" /></LocalPlayerContext.Provider>
+                        <div className="text-[11px] font-bold text-emerald-200">目標：{prePlayer.name}（唯一可選）</div>
+                      </div>
                     ) : (
                       <PlayerPicker label={modal.type === 'BOUNTY_HUNTER' ? '選擇目標（可選自己）：' : '選擇對手目標：'} value={selectedTarget} onChange={setSelectedTarget} options={modal.type === 'BOUNTY_HUNTER' ? [players.find(p => p.id === humanPlayerId), ...aliveTargets].filter(Boolean) : aliveTargets} humanPlayerId={humanPlayerId} />
                     )}
 
-                    {/* 猜測數值選擇 */}
-                    {isGuess && (
+                    {/* 村民：單選數值；刺客：雙選數值（同扒手：第1／第2下，再點取消，角標1／2） */}
+                    {modal.type === 'VILLAGER' && (
                       <div>
-                        <label className="block text-slate-400 mb-1">{modal.type === 'ASSASSIN' ? '第 1 次猜測數值 (0–10)：' : '宣告手牌數值 (0–10)：'}</label>
-                        <select value={guessedVal} onChange={e => { const v = e.target.value; setGuessedVal(v); if (v === guessedVal2) setGuessedVal2(v === '0' ? '1' : '0'); }} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-amber-300 font-bold">
-                          {[...Array(11).keys()].map(v => <option key={v} value={v}>數值 {v}（{unseenText(v)}）</option>)}
-                        </select>
+                        <label className="block text-slate-400 mb-1.5">宣告手牌數值 (0–10)：</label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[...Array(11).keys()].map(v => {
+                            const sel = guessedVal === String(v);
+                            return (
+                              <button
+                                type="button"
+                                key={v}
+                                onClick={() => setGuessedVal(String(v))}
+                                className={`rounded-lg border px-1 py-1.5 text-center active:scale-95 transition ${sel ? 'border-amber-400 bg-amber-500/20 ring-2 ring-amber-400/50' : 'border-slate-700 bg-slate-800'}`}
+                              >
+                                <div className={`font-mono font-black text-sm ${sel ? 'text-amber-300' : 'text-slate-200'}`}>{v}</div>
+                                <div className="text-[8px] leading-tight text-slate-400 mt-0.5 line-clamp-2">{unseenText(v)}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                     {modal.type === 'ASSASSIN' && (
                       <div>
-                        <label className="block text-slate-400 mb-1">第 2 次猜測數值 (0–10，同一目標)：</label>
-                        <select value={guessedVal2} onChange={e => setGuessedVal2(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded p-1.5 text-amber-300 font-bold">
-                          {[...Array(11).keys()].filter(v => v.toString() !== guessedVal).map(v => <option key={v} value={v}>數值 {v}（{unseenText(v)}）</option>)}
-                        </select>
+                        <label className="block text-slate-400 mb-1">點選兩個數值（再點同一數值可取消）</label>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {[...Array(11).keys()].map(v => {
+                            const vStr = String(v);
+                            const slot = guessedVal === vStr ? 1 : guessedVal2 === vStr ? 2 : 0;
+                            return (
+                              <button
+                                type="button"
+                                key={v}
+                                onClick={() => toggleAssassinGuess(vStr)}
+                                className={`relative rounded-lg border px-1 py-1.5 text-center active:scale-95 transition ${
+                                  slot ? 'border-amber-400 bg-amber-500/20 ring-2 ring-amber-400/50' : 'border-slate-700 bg-slate-800'
+                                }`}
+                              >
+                                {slot > 0 && (
+                                  <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-amber-400 text-[10px] font-black text-slate-950 flex items-center justify-center shadow">{slot}</span>
+                                )}
+                                <div className={`font-mono font-black text-sm ${slot ? 'text-amber-300' : 'text-slate-200'}`}>{v}</div>
+                                <div className="text-[8px] leading-tight text-slate-400 mt-0.5 line-clamp-2">{unseenText(v)}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="mt-1.5 text-[10px] text-slate-500">
+                          {guessedVal !== '' && guessedVal2 !== ''
+                            ? `已選：(${guessedVal}) 與 (${guessedVal2})`
+                            : guessedVal !== ''
+                              ? `已選第 1 個（${guessedVal}），請再選第 2 個`
+                              : '請選擇兩個猜測數值'}
+                        </div>
                       </div>
                     )}
 
@@ -5072,6 +5405,8 @@
                           modal.type === 'NIGHT_WATCHMAN' ? !selectedKeepCard :
                           modal.type === 'GRAVEDIGGER' ? (!selectedTarget || !selectedStolenCard) :
                           modal.type === 'PICKPOCKET' ? (!selectedTarget || !secondaryTarget) :
+                          modal.type === 'ASSASSIN' ? (!selectedTarget || guessedVal === '' || guessedVal2 === '') :
+                          modal.type === 'VILLAGER' ? (!selectedTarget || guessedVal === '') :
                           !selectedTarget
                         }
                         onClick={() => onSubmit({ 
