@@ -1487,7 +1487,7 @@
         };
 
         function App() {
-          const [version] = useState('v0.0.14');
+          const [version] = useState('v0.0.17');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => safeStorageGet('wolfmoon.displayName') || '');
           const [firebaseUser, setFirebaseUser] = useState(null);
@@ -1520,6 +1520,7 @@
           const fastRef = useRef(false);
           const humanIdRef = useRef(0);
           const [gameReady, setGameReady] = useState(false);
+          const [forceApplyTick, setForceApplyTick] = useState(0); // Guest 救援：強制重跑套用遠端
 
           useEffect(() => {
             if (!isFirebaseConfigured()) {
@@ -1886,6 +1887,7 @@
           const pendingAiRef = useRef(false);
           const aiRunRef = useRef(0);
           const winsRef = useRef({});
+          const lastRoundWinnerIdsRef = useRef([]); // 上一局獲勝者 id，下一局先手
           const takenCardRef = useRef(null);
           const takenSlotRef = useRef(null);
           // 需選目標／確認的牌：C 區展示延到按確認後才 push，避免預先露出手牌
@@ -1914,6 +1916,17 @@
             : 0;
           humanIdRef.current = humanPlayerId;
           const humanPlayerName = (players.find(p => p.id === humanPlayerId) || {}).name || '你';
+          // D／E 其他玩家顯示序：由左至右＝下一位 ➜ … ➜ 上一位（自己不顯示；最右＝上家、最左＝下家）
+          const otherPlayersOrdered = (() => {
+            const list = players || [];
+            const n = list.length;
+            if (n <= 1) return [];
+            const myIdx = list.findIndex(p => p.id === humanPlayerId);
+            if (myIdx < 0) return list.filter(p => p.id !== humanPlayerId);
+            const ordered = [];
+            for (let i = 1; i < n; i++) ordered.push(list[(myIdx + i) % n]);
+            return ordered;
+          })();
           const canonicalizePlayerText = value => {
             const text = String(value ?? '');
             return !onlineSession || humanPlayerName === '你' ? text : text.replace(/你/g, humanPlayerName);
@@ -2509,7 +2522,14 @@
             takenSlotRef.current = null;
             setPlayerHands(hands);
             setPlayers(roster.map(p => ({ ...p, status: '存活', protected: false, playedCards: [], witchRevived: false, handTaken: false })));
-            setCurrentTurnIndex(0);
+            // 上一局勝利玩家先出牌（多人共同獲勝時取名單中第一位仍在本局 roster 者）
+            const prevWinners = (lastRoundWinnerIdsRef.current || []).filter(id => roster.some(p => p.id === id));
+            let startTurn = 0;
+            if (prevWinners.length) {
+              const idx = roster.findIndex(p => p.id === prevWinners[0]);
+              startTurn = idx >= 0 ? idx : 0;
+            }
+            setCurrentTurnIndex(startTurn);
             setMoonPhase(0);
             setGameOver(false);
             setWinnerInfo(null);
@@ -2535,10 +2555,17 @@
             setWitchTargetOwner(null);
             setIsReturningCenterCard(false);
             setExtraTurnPlayerId(null);
-            
+
+            const starter = roster[startTurn];
+            const starterName = starter ? starter.name : '';
+            const startHint = prevWinners.length && starter
+              ? `➔ 上一局勝者【${starterName}】先出牌；狼人已潛伏在牌庫頂層`
+              : '➔ 狼人已潛伏在牌庫頂層';
             setBroadcastAction('《狼月》牌庫準備完畢！');
-            setBroadcastResult('➔ 狼人已潛伏在牌庫頂層');
-            setHistoryLogs([{ id: Date.now(), player: '系統', card: '《狼月》牌庫準備完畢！狼人已潛伏在頂層。' }]);
+            setBroadcastResult(startHint);
+            setHistoryLogs([{ id: Date.now(), player: '系統', card: prevWinners.length && starter
+              ? `《狼月》牌庫準備完畢！上一局勝者【${starterName}】先出牌。狼人已潛伏在頂層。`
+              : '《狼月》牌庫準備完畢！狼人已潛伏在頂層。' }]);
             setGameReady(true);
           };
 
@@ -2557,23 +2584,35 @@
               const retry = setTimeout(() => {
                 // init 成功並寫入後 gameRevisionRef ≥ 1；仍為 0 代表尚未成功發布
                 if (gameRevisionRef.current > 0) return;
+                gameRevisionRef.current = 0;
                 initGame(roster);
               }, 2000);
-              return () => clearTimeout(retry);
+              // 再保險：6 秒後若仍無 revision，再試一次（Guest 卡在同步畫面時多半是房主沒寫成功）
+              const retry2 = setTimeout(() => {
+                if (gameRevisionRef.current > 0) return;
+                gameRevisionRef.current = 0;
+                initGame(roster);
+              }, 6000);
+              return () => { clearTimeout(retry); clearTimeout(retry2); };
             }
             initGame(INITIAL_PLAYERS);
           }, [screen, onlineSession, roomData && roomData.round, roomData && roomData.hostUid, roomData && roomData.status, roomData && !!(roomData.gameState && roomData.gameState.revision > 0), firebaseUser]);
 
-          // 新局／開局：gameState 為 null 時，僅非房主重置 revision 並清空桌面；房主由 initGame 負責，避免清掉剛初始化的牌局
+          // 新局／開局：gameState 為 null 時重置 revision；非房主清空桌面等房主發牌；房主也歸零 revision 以便 initGame 發布
           useEffect(() => {
             if (!onlineSession || screen !== 'game' || !roomData || !firebaseUser) return;
             if (roomData.gameState) return;
-            if (roomData.hostUid === firebaseUser.uid) return;
+            // 任何客戶端：新局清空期間作廢舊 revision／在飛發布，避免卡在「等待房主發牌」或把上局寫回
             gameRevisionRef.current = 0; turnSeqRef.current = 0;
+            publishGenRef.current += 1;
+            publishInFlightRef.current = false;
+            publishDirtyRef.current = false;
+            publishRetryRef.current = 0;
             gameRoundRef.current = roomData.round || 0;
             victoryLocalRef.current = false;
             lastActorUidRef.current = null;
             gameOverRef.current = false;
+            if (roomData.hostUid === firebaseUser.uid) return; // 房主由 initGame 負責桌面，此處只歸零序號
             // 先清空本機桌面；勝場以房主下一份快照為準（整場結束會是 {}，中場下一局會帶累計）
             winsRef.current = {};
             scoreDoneKeysRef.current = new Set();
@@ -2651,8 +2690,9 @@
             if (snapshot.revision <= gameRevisionRef.current) return;
             // 換局（round 變更）時一律套用房主新牌局，不做 turnSeq 拒絕（否則會留下上局手牌／C 區／勝場）
             // 同局回合權威：
-            // 1) 本機 turnSeq 較新 → 遠端是舊快照，不套用，只跟上 revision 並觸發本機再發布。
+            // 1) 本機 turnSeq 較新且仍握行動權 → 遠端是舊快照，不套用，只跟上 revision 並觸發本機再發布。
             // 2) 本機仍握有行動權且同 turnSeq、非本人寫入 → 不套用。
+            // 3) 本機 turnSeq 較新但已無行動權 → 視為本機發布失敗的分叉，改以遠端為準（避免 Guest 永久卡死、讀不到之後行動）。
             if (!roundChanged) {
               const stLocal = stateRef.current;
               const hostOwns = !!(roomData && roomData.hostUid === firebaseUser.uid);
@@ -2666,10 +2706,13 @@
               const snapSeq = snapshot.turnSeq || 0;
               const localSeq = turnSeqRef.current || 0;
               if (localPlayers.length > 0 && snapSeq < localSeq) {
-                gameRevisionRef.current = Math.max(gameRevisionRef.current, snapshot.revision);
-                lockRef.current = false;
-                setSyncTick(t => t + 1);
-                return;
+                if (iOwnLocalTurn) {
+                  gameRevisionRef.current = Math.max(gameRevisionRef.current, snapshot.revision);
+                  lockRef.current = false;
+                  setSyncTick(t => t + 1);
+                  return;
+                }
+                // 無行動權卻序號超前：放棄本機分叉，套用遠端
               }
               if (iOwnLocalTurn && localPlayers.length > 0) {
                 if (snapSeq === localSeq && snapshot.sourceUid && snapshot.sourceUid !== firebaseUser.uid) {
@@ -2682,6 +2725,7 @@
             } else {
               scoreDoneKeysRef.current = new Set();
             }
+            applyingRemoteGameRef.current = true;
             const incomingPlayers = Array.isArray(snapshot.players)
               ? snapshot.players
               : Object.values(snapshot.players || {});
@@ -2742,13 +2786,20 @@
               setPlayedCardArena(snapshot.playedCardArena || null);
               setRecentArenaCards(Array.isArray(snapshot.recentArenaCards) ? snapshot.recentArenaCards.slice(0, 6) : []);
               setArenaFanOpen(false);
-              setArenaFocus(null);
+              // 不清除 arenaFocus：遠端快照頻繁套用時會讓「點面前牌放大」瞬間關掉
               setSeerSeen(null);
               setDrunkSeen(null);
               setSelectedHandCard(null);
-              setInteractionModal(null);
-              setIsReturningCenterCard(false);
-              pendingArenaCardRef.current = null;
+              // 僅在回合已不屬於本機真人時才關閉互動彈窗，避免 Guest 出刺客等牌中途被遠端套用清掉彈窗而卡死
+              {
+                const incomingActor = normalizedPlayers[snapshot.currentTurnIndex];
+                const stillMyHumanTurn = !!(incomingActor && !incomingActor.isAI && firebaseUser && incomingActor.uid === firebaseUser.uid);
+                if (!stillMyHumanTurn) {
+                  setInteractionModal(null);
+                  setIsReturningCenterCard(false);
+                  pendingArenaCardRef.current = null;
+                }
+              }
               setBroadcastActionRaw(snapshot.broadcastAction || '');
               setBroadcastResult(snapshot.broadcastResult || '');
               setBroadcastReveal(snapshot.broadcastReveal || '');
@@ -2763,13 +2814,29 @@
               setActionLocked(false);
               setGameReady(true);
             });
-          }, [roomData && roomData.gameState, screen, onlineSession, firebaseUser]);
+            // 下一幀再允許發布，避免用「套用前的本機舊狀態」覆寫剛寫入的遠端快照
+            setTimeout(() => { applyingRemoteGameRef.current = false; }, 0);
+          }, [roomData && roomData.gameState, screen, onlineSession, firebaseUser, forceApplyTick]);
+
+          // Guest 救援：RTDB 已有牌局但本機一直 gameReady=false（例如錯過套用）→ 強制重跑套用
+          useEffect(() => {
+            if (!onlineSession || screen !== 'game' || !firebaseUser || !roomData) return;
+            if (gameReady) return;
+            const gs = roomData.gameState;
+            if (!gs || !(gs.revision > 0)) return;
+            // 降低 revision 門檻並觸發 apply effect 重跑
+            gameRevisionRef.current = Math.max(0, (gs.revision || 1) - 1);
+            if (gs.sourceUid === firebaseUser.uid) {
+              setGameReady(true);
+            } else {
+              setForceApplyTick(t => t + 1);
+            }
+          }, [onlineSession, screen, gameReady, roomData && roomData.gameState, firebaseUser]);
 
           useEffect(() => {
-            if (!onlineSession || screen !== 'game' || !gameReady || !firebaseUser || !roomCode || applyingRemoteGameRef.current) {
-              applyingRemoteGameRef.current = false;
-              return;
-            }
+            // 正在套用遠端快照：不要發布，也不可把 flag 清掉（否則會立刻用舊本機狀態覆寫）
+            if (!onlineSession || screen !== 'game' || !gameReady || !firebaseUser || !roomCode) return;
+            if (applyingRemoteGameRef.current) return;
             // 房主已清空 gameState 準備新局：僅非房主不可把上局手牌寫回去；房主必須能寫入 initGame 後的新狀態
             const hostOwnsRoom = roomData && roomData.hostUid === firebaseUser.uid;
             if (roomData && roomData.gameState == null && !hostOwnsRoom) return;
@@ -2782,9 +2849,12 @@
             //   (b) 剛結束自己的回合（lastActorUid 仍是自己）——必須把「出牌結果 + proceedToNext 後的 currentTurnIndex」寫出去，
             //       否則房主永遠停在 Guest 回合，下一位 AI／玩家不會動。
             // 發布成功後 lastActorUid 會改成當前 actor（AI 為 null），Guest 即失去再寫入權，不會獨跑 AI。
+            // 房主不可在「其他真人回合中」重播／覆寫狀態（否則會與 Guest 的刺客等互動結算搶 revision，把已換人的快照蓋回中途狀態，造成 Guest 卡死）。
+            const isSelfHumanTurn = !!actor && !actor.isAI && actorUid === firebaseUser.uid;
+            const justActed = lastActorUidRef.current === firebaseUser.uid;
             const mayPublish = hostOwnsRoom
-              || (!!actor && !actor.isAI && actorUid === firebaseUser.uid)
-              || (lastActorUidRef.current === firebaseUser.uid);
+              ? (!actor || actor.isAI || isSelfHumanTurn || justActed || !!gameOver)
+              : (isSelfHumanTurn || justActed);
             if (!mayPublish) return;
             if (gameSyncTimerRef.current) clearTimeout(gameSyncTimerRef.current);
             gameSyncTimerRef.current = setTimeout(async () => {
@@ -3060,6 +3130,7 @@
               if (witchOwner) { winnerText += ` & ${witchOwner.name} (女巫共同獲勝)`; winnerIds.push(witchOwner.id); }
             }
             setGameOver(true);
+            lastRoundWinnerIdsRef.current = [...new Set(winnerIds)];
             // 勝場：每位獲勝者（含共同獲勝）得 1 個月亮標記
             // 3–4 人場累計 3 勝整場；5–6 人場累計 2 勝整場
             const playerCount = (st.players || []).length;
@@ -4525,7 +4596,8 @@
                   const roster = (after && after.gamePlayers) || (roomData && roomData.gamePlayers) || INITIAL_PLAYERS;
                   setTimeout(() => {
                     if (cancelled) return;
-                    if (gameRevisionRef.current > 0) return;
+                    // 新局 gameState 已清空；強制歸零後發牌（不可因上局 revision 殘留而跳過）
+                    gameRevisionRef.current = 0;
                     initGame(roster);
                   }, 80);
                 }
@@ -4760,6 +4832,17 @@
                     </span>
                   </div>
                   <div className="flex items-center space-x-1.5">
+                    <button
+                      onClick={() => {
+                        if (onlineSession) setScreen('lobby');
+                        else { setOnlineSession(false); setScreen('home'); }
+                      }}
+                      className="flex items-center justify-center h-6 gap-0.5 whitespace-nowrap bg-slate-800/90 border border-slate-500/50 text-slate-300 text-[10px] font-bold px-1.5 rounded-md shadow-sm active:scale-95"
+                      title="返回大廳"
+                    >
+                      <i className="fa-solid fa-arrow-left text-[9px]"></i>
+                      <span>大廳</span>
+                    </button>
                     <button onClick={() => setShowBroadcast(v => !v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${showBroadcast ? 'bg-emerald-500/25 border-emerald-400/70 text-emerald-200' : 'bg-slate-800/90 border-slate-600/60 text-slate-400'}`}>動態</button>
                     {[0.5].map(v => (
                       <button key={v} onClick={() => changeSpeed(v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-mono font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${speed === v ? 'bg-sky-500/25 border-sky-400/80 text-sky-200' : 'bg-slate-800/90 border-slate-500/50 text-slate-400'}`}>{v}x</button>
@@ -4840,9 +4923,9 @@
                   </div>
                 </div>
 
-                {/* D區: 除自己以外的玩家（名字與框底多留空白） */}
+                {/* D區: 除自己以外的玩家（左＝下家 … 右＝上家；名字與框底多留空白） */}
                 <section className="shrink-0 bg-slate-900/60 border-b border-slate-800/80 px-1 py-0.5 flex items-center overflow-hidden gap-1" style={{ minHeight: 50 }}>
-                  {players.filter(p => p.id !== humanPlayerId).map((player) => {
+                  {otherPlayersOrdered.map((player) => {
                     const idx = players.findIndex(p => p.id === player.id);
                     const isTurn = currentTurnIndex === idx;
                     const isDead = player.status === '出局';
@@ -4886,10 +4969,10 @@
                     </div>
                   )}
 
-                  {/* E 上：其他玩家面前的牌（對齊 D；數值+名稱；最新一張較完整顯示） */}
+                  {/* E 上：其他玩家面前的牌（對齊 D：左＝下家 … 右＝上家；數值+名稱；最新一張較完整顯示） */}
                   {!(gameOver && victoryDismissed) && (
                     <div className="relative z-10 w-full flex gap-1 shrink-0 mb-0.5 items-start">
-                      {players.filter(p => p.id !== humanPlayerId).map(player => {
+                      {otherPlayersOrdered.map(player => {
                         // 字級對齊中間出牌卡（title text-[9px]、數值 text-[10px]）；無牌不顯示「—」
                         const fronts = getFrontCards(player);
                         const step = 15;
