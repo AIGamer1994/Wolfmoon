@@ -284,7 +284,7 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2100, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3200, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, alchemist: 3600, wolfbite: 4300, vampire: 6500 };
+        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2800, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3600, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, alchemist: 3600, wolfbite: 4300, vampire: 6500 };
         // 被動牌打出時「沒有任何效果（原因）」的原因（動態廣播、行動紀錄、置於面前動畫共用）
         const PASSIVE_WHY = {
           '乞丐之王': '結算時才發動',
@@ -299,7 +299,7 @@
         const fxHold = (f) => (f && f.kind === 'place' ? 2000 : (f && f.kind === 'moon' ? 800 : 1000));
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
-        const FX_TOTAL_BY = { compare: 7000, grave: 4600, place: 4000, servant: 4000, alchemist: 4200, drunk: 5000, wolfbite: 4300, vampire: 6500 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
+        const FX_TOTAL_BY = { compare: 7000, grave: 4800, peek: 3600, place: 4000, servant: 4000, alchemist: 4200, drunk: 5000, wolfbite: 4300, vampire: 6500 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -494,6 +494,22 @@
             if (bm) {
               const bmeta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === bm[2]);
               fx.revealed = { value: parseInt(bm[1], 10), title: bm[2], icon: bmeta && bmeta.icon };
+            }
+          } else if (kind === 'peek') {
+            const pm = /手牌為\s*([^\s(（]+)[（(](\d+)[）)]/.exec(res)
+              || /手牌為\s*\((\d+)\)【([^】]+)】/.exec(res);
+            if (pm) {
+              if (pm[2] && isNaN(parseInt(pm[1], 10))) {
+                const title = pm[1];
+                const value = parseInt(pm[2], 10);
+                const pmeta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === title);
+                fx.peeked = { value, title, icon: pmeta && pmeta.icon };
+              } else if (pm[1] && pm[2]) {
+                const value = parseInt(pm[1], 10);
+                const title = pm[2];
+                const pmeta = [...BASE_CARDS_DEF, WEREWOLF_CARD].find(c => c.title === title);
+                fx.peeked = { value, title, icon: pmeta && pmeta.icon };
+              }
             }
           } else if (kind === 'grave') {
             const gm = /面前\((\d+)\)【([^】]+)】/.exec(res);
@@ -1153,6 +1169,85 @@
                 <div className="text-[11px] font-black text-cyan-200" style={an('fxFadeUp', 0.4, 0.9)}><span className="font-mono text-amber-300">{card.value}</span> {card.title}｜受保護至下個回合</div>
               </div>
             );
+          } else if (kind === 'peek') {
+            body = (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-200" style={an('fxPop', 0.4, 0)}>
+                  <span><span className="font-mono text-amber-300">{card.value}</span> {card.title}</span>
+                </div>
+                <div className="flex items-center justify-center gap-3">
+                  <div style={an('fxInL', 0.4, 0.1)}><FxChip p={src} /></div>
+                  <div className="flex flex-col items-center gap-0.5" style={an('fxPop', 0.4, 0.3)}>
+                    <i className="fa-solid fa-eye text-sky-300 text-xl drop-shadow" style={an('fxFlash', 0.8, 0.7)}></i>
+                    <span className="text-[9px] font-black text-sky-200">秘密檢視</span>
+                  </div>
+                  <div style={an('fxInR', 0.4, 0.1)}><FxChip p={tgt} /></div>
+                </div>
+                {fx.peeked ? (
+                  <div className="flex flex-col items-center gap-1 mt-1" style={an('fxPop', 0.4, 1.4)}>
+                    <span className="text-[10px] font-black text-sky-300"><i className="fa-solid fa-lock mr-0.5"></i>你看到的手牌</span>
+                    <FxFace c={fx.peeked} cls="w-14 h-[76px]" />
+                  </div>
+                ) : (
+                  <div className="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-500/50 text-sky-200 font-black text-[10px]" style={an('fxFadeUp', 0.35, 1.2)}>
+                    <i className="fa-solid fa-eye mr-1"></i>秘密檢視完成
+                  </div>
+                )}
+              </div>
+            );
+          } else if (kind === 'grave') {
+            const graveSelf = !!(tgt && src && tgt.id === src.id);
+            body = (
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-amber-200" style={an('fxPop', 0.4, 0)}>
+                  <span><span className="font-mono text-amber-300">{card.value}</span> {card.title}</span>
+                </div>
+                <div className="relative flex items-center justify-center gap-2">
+                  <div ref={slotRef} className="relative w-14 h-[76px] shrink-0">
+                    {fx.stolen && (
+                      <div ref={stolenRef} className="absolute inset-0 z-20" style={{ animation: 'fxGraveMove 1.6s ease-in-out .85s both' }}>
+                        <div className="absolute inset-0" style={an('fxFlipOut', 0.2, 1.0, 'ease-in')}><FxBack cls="w-14 h-[76px]" /></div>
+                        <div className="absolute inset-0" style={an('fxFlipIn', 0.25, 1.2, 'ease-out')}><FxFace c={fx.stolen} cls="w-14 h-[76px]" /></div>
+                      </div>
+                    )}
+                    {!fx.stolen && <div className="w-14 h-[76px] rounded-md border-2 border-dashed border-slate-600/60" />}
+                    <span className="absolute left-0 right-0 top-full mt-1 text-center text-[9px] font-black text-amber-200" style={an('fxFadeUp', 0.3, 2.5)}>奪取</span>
+                  </div>
+                  <div style={an('fxInL', 0.4, 0)}><FxChip p={src} /></div>
+                  <div style={an('fxPop', 0.4, 0.15)}><FxFace c={card} cls="w-12 h-[66px]" /></div>
+                  {tgt && !graveSelf && (
+                    <>
+                      <i className="fa-solid fa-arrow-right text-amber-400 text-sm" style={an('fxFadeUp', 0.3, 0.4)}></i>
+                      <div ref={tgtRef} className="relative" style={an('fxInR', 0.4, 0.5)}>
+                        <FxChip p={tgt} />
+                        {fx.stolen && (
+                          <div className="absolute left-full ml-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={an('fxOut', 0.35, 0.95, 'ease-in')}>
+                            <FxFace c={fx.stolen} cls="w-10 h-[54px]" />
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {graveSelf && (
+                    <>
+                      <span className="text-[10px] font-black text-slate-300" style={an('fxFadeUp', 0.3, 0.5)}>對自己</span>
+                      <div ref={tgtRef} className="relative w-10 h-[54px] shrink-0" style={an('fxInR', 0.4, 0.5)}>
+                        {fx.stolen && (
+                          <div className="absolute inset-0 pointer-events-none" style={an('fxOut', 0.35, 0.95, 'ease-in')}>
+                            <FxFace c={fx.stolen} cls="w-10 h-[54px]" />
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {fx.stolen && (
+                  <div className="text-[10px] font-black text-amber-200" style={an('fxFadeUp', 0.35, 2.6)}>
+                    奪取面前 <span className="font-mono text-amber-300">({fx.stolen.value})</span> {fx.stolen.title}
+                  </div>
+                )}
+              </div>
+            );
           } else {
             // 通用：出牌者 ➔ 牌 ➔ 目標，再依牌種顯示中間資訊與結果章
             const stampSrc = fx.stampOn === 'src';
@@ -1174,12 +1269,6 @@
                 </div>
               );
               stampAt = 1.6;
-            } else if (kind === 'peek') {
-              badges = (
-                <div className="px-2.5 py-1 rounded-lg bg-slate-800 border border-sky-500/60 text-sky-200 font-black text-xs" style={an('fxFlip', 0.35, 1.0)}>
-                  <i className="fa-solid fa-eye mr-1"></i>秘密檢視中…
-                </div>
-              );
             } else if (kind === 'bounty') {
               badges = (
                 <div className="flex items-center gap-2">
@@ -1194,8 +1283,6 @@
                   </div>
                 </div>
               );
-            } else if (kind === 'grave') {
-              stampAt = 3.0;
             } else if (kind === 'witch') {
               stampAt = 1.2;
             } else if (kind === 'selfout') {
@@ -1211,21 +1298,12 @@
             body = (
               <div className="flex flex-col items-center">
                 <div className="relative flex items-center justify-center gap-2.5">
-                  {kind === 'grave' && fx.stolen && (
-                    <div ref={slotRef} className="relative w-14 h-[76px] shrink-0">
-                      <div ref={stolenRef} className="absolute inset-0 z-20" style={{ animation: 'fxGraveMove 1.5s ease-in-out .9s both' }}>
-                        <div className="absolute inset-0" style={an('fxFlipOut', 0.2, 1.05, 'ease-in')}><FxBack cls="w-14 h-[76px]" /></div>
-                        <div className="absolute inset-0" style={an('fxFlipIn', 0.25, 1.25, 'ease-out')}><FxFace c={fx.stolen} cls="w-14 h-[76px]" /></div>
-                      </div>
-                      <span className="absolute left-0 right-0 top-full mt-1 text-center text-[9px] font-black text-amber-200" style={an('fxFadeUp', 0.3, 2.4)}>奪取</span>
-                    </div>
-                  )}
                   {srcWrap}
                   <div style={an('fxPop', 0.4, 0.15)}><FxFace c={card} cls="w-14 h-[76px]" /></div>
                   {tgt && tgt !== src && (
                     <>
                       <i className="fa-solid fa-arrow-right text-amber-400 text-sm" style={an('fxFadeUp', 0.3, 0.5)}></i>
-                      <div ref={tgtRef} className="relative" style={an('fxInR', 0.4, 0.6)}>
+                      <div className="relative" style={an('fxInR', 0.4, 0.6)}>
                         <div style={stampTgt && fx.stampText && fx.tone === 'out' ? an('fxShake', 0.5, stampAt + 0.2) : undefined}>
                           <FxChip p={tgt} glow={kind === 'witch' ? 'ring-4 ring-emerald-400/70' : ''} />
                         </div>
@@ -1409,7 +1487,7 @@
         };
 
         function App() {
-          const [version] = useState('v0.0.4');
+          const [version] = useState('v0.0.17');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => safeStorageGet('wolfmoon.displayName') || '');
           const [firebaseUser, setFirebaseUser] = useState(null);
@@ -1442,6 +1520,7 @@
           const fastRef = useRef(false);
           const humanIdRef = useRef(0);
           const [gameReady, setGameReady] = useState(false);
+          const [forceApplyTick, setForceApplyTick] = useState(0); // Guest 救援：強制重跑套用遠端
 
           useEffect(() => {
             if (!isFirebaseConfigured()) {
@@ -1750,7 +1829,7 @@
           const [recentArenaCards, setRecentArenaCards] = useState([]);
           const [arenaFanOpen, setArenaFanOpen] = useState(false);
           const [arenaFocus, setArenaFocus] = useState(null);
-          const [showBroadcast, setShowBroadcast] = useState(true); // C 區頂部「動態」廣播：預設開啟
+          const [showBroadcast, setShowBroadcast] = useState(false); // C 區頂部「動態」廣播：預設開啟
           const [fx, setFx] = useState(null);          // C 區效果動畫
           const fxRef = useRef(fx);
           fxRef.current = fx;
@@ -1808,6 +1887,7 @@
           const pendingAiRef = useRef(false);
           const aiRunRef = useRef(0);
           const winsRef = useRef({});
+          const lastRoundWinnerIdsRef = useRef([]); // 上一局獲勝者 id，下一局先手
           const takenCardRef = useRef(null);
           const takenSlotRef = useRef(null);
           // 需選目標／確認的牌：C 區展示延到按確認後才 push，避免預先露出手牌
@@ -1836,6 +1916,17 @@
             : 0;
           humanIdRef.current = humanPlayerId;
           const humanPlayerName = (players.find(p => p.id === humanPlayerId) || {}).name || '你';
+          // D／E 其他玩家顯示序：由左至右＝下一位 ➜ … ➜ 上一位（自己不顯示；最右＝上家、最左＝下家）
+          const otherPlayersOrdered = (() => {
+            const list = players || [];
+            const n = list.length;
+            if (n <= 1) return [];
+            const myIdx = list.findIndex(p => p.id === humanPlayerId);
+            if (myIdx < 0) return list.filter(p => p.id !== humanPlayerId);
+            const ordered = [];
+            for (let i = 1; i < n; i++) ordered.push(list[(myIdx + i) % n]);
+            return ordered;
+          })();
           const canonicalizePlayerText = value => {
             const text = String(value ?? '');
             return !onlineSession || humanPlayerName === '你' ? text : text.replace(/你/g, humanPlayerName);
@@ -2050,10 +2141,26 @@
             }, 18000);
             return () => { cancelled = true; clearTimeout(t); clearTimeout(force); };
           }, [gameOver]);
-          // 點行動紀錄 ➔ 關閉紀錄視窗，在 C 區回放該筆動畫（純視覺，不影響遊戲）
-          const playLogFx = (f) => { setIsHistoryModalOpen(false); setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 })); };
-          // 回放播完（或點一下離開）➔ 回到行動紀錄彈窗
-          const closeReplay = () => { setReplay(null); setIsHistoryModalOpen(true); };
+          // 動態區可重播最近一筆效果動畫
+          const [lastBroadcastFx, setLastBroadcastFx] = useState(null);
+          const historyWasOpenForReplayRef = useRef(false);
+          // 點行動紀錄 ➔ 關閉紀錄視窗，回放該筆動畫（純視覺，不影響遊戲）
+          const playLogFx = (f) => {
+            historyWasOpenForReplayRef.current = true;
+            setIsHistoryModalOpen(false);
+            setReplay(r => ({ fx: f, n: (r ? r.n : 0) + 1 }));
+          };
+          const playBroadcastFx = () => {
+            if (!lastBroadcastFx) return;
+            historyWasOpenForReplayRef.current = false;
+            setReplay(r => ({ fx: lastBroadcastFx, n: (r ? r.n : 0) + 1 }));
+          };
+          // 回放結束：若從紀錄進來則回到紀錄彈窗
+          const closeReplay = () => {
+            setReplay(null);
+            if (historyWasOpenForReplayRef.current) setIsHistoryModalOpen(true);
+            historyWasOpenForReplayRef.current = false;
+          };
           useEffect(() => {
             if (!replay || !replay.fx) return;
             if (['moon', 'wolfbite', 'vampire'].includes(replay.fx.kind)) return; // 全屏動畫回放：播完停住，點一下離開
@@ -2202,7 +2309,12 @@
               ...prev
             ]);
             // skipFx：只寫動態／紀錄（如先知），不播放效果動畫
-            if (localFx && !visibility?.skipFx) startFx(localFx, publicFx);
+            if (localFx && !visibility?.skipFx) {
+              startFx(localFx, publicFx);
+              setLastBroadcastFx(localFx);
+            } else if (publicFx) {
+              setLastBroadcastFx(publicFx);
+            }
           };
 
           // 暗牌追蹤：某人對某一格「拿一還一」（看過 + 換過）
@@ -2410,7 +2522,14 @@
             takenSlotRef.current = null;
             setPlayerHands(hands);
             setPlayers(roster.map(p => ({ ...p, status: '存活', protected: false, playedCards: [], witchRevived: false, handTaken: false })));
-            setCurrentTurnIndex(0);
+            // 上一局勝利玩家先出牌（多人共同獲勝時取名單中第一位仍在本局 roster 者）
+            const prevWinners = (lastRoundWinnerIdsRef.current || []).filter(id => roster.some(p => p.id === id));
+            let startTurn = 0;
+            if (prevWinners.length) {
+              const idx = roster.findIndex(p => p.id === prevWinners[0]);
+              startTurn = idx >= 0 ? idx : 0;
+            }
+            setCurrentTurnIndex(startTurn);
             setMoonPhase(0);
             setGameOver(false);
             setWinnerInfo(null);
@@ -2436,10 +2555,17 @@
             setWitchTargetOwner(null);
             setIsReturningCenterCard(false);
             setExtraTurnPlayerId(null);
-            
+
+            const starter = roster[startTurn];
+            const starterName = starter ? starter.name : '';
+            const startHint = prevWinners.length && starter
+              ? `➔ 上一局勝者【${starterName}】先出牌；狼人已潛伏在牌庫頂層`
+              : '➔ 狼人已潛伏在牌庫頂層';
             setBroadcastAction('《狼月》牌庫準備完畢！');
-            setBroadcastResult('➔ 狼人已潛伏在牌庫頂層');
-            setHistoryLogs([{ id: Date.now(), player: '系統', card: '《狼月》牌庫準備完畢！狼人已潛伏在頂層。' }]);
+            setBroadcastResult(startHint);
+            setHistoryLogs([{ id: Date.now(), player: '系統', card: prevWinners.length && starter
+              ? `《狼月》牌庫準備完畢！上一局勝者【${starterName}】先出牌。狼人已潛伏在頂層。`
+              : '《狼月》牌庫準備完畢！狼人已潛伏在頂層。' }]);
             setGameReady(true);
           };
 
@@ -2458,23 +2584,35 @@
               const retry = setTimeout(() => {
                 // init 成功並寫入後 gameRevisionRef ≥ 1；仍為 0 代表尚未成功發布
                 if (gameRevisionRef.current > 0) return;
+                gameRevisionRef.current = 0;
                 initGame(roster);
               }, 2000);
-              return () => clearTimeout(retry);
+              // 再保險：6 秒後若仍無 revision，再試一次（Guest 卡在同步畫面時多半是房主沒寫成功）
+              const retry2 = setTimeout(() => {
+                if (gameRevisionRef.current > 0) return;
+                gameRevisionRef.current = 0;
+                initGame(roster);
+              }, 6000);
+              return () => { clearTimeout(retry); clearTimeout(retry2); };
             }
             initGame(INITIAL_PLAYERS);
           }, [screen, onlineSession, roomData && roomData.round, roomData && roomData.hostUid, roomData && roomData.status, roomData && !!(roomData.gameState && roomData.gameState.revision > 0), firebaseUser]);
 
-          // 新局／開局：gameState 為 null 時，僅非房主重置 revision 並清空桌面；房主由 initGame 負責，避免清掉剛初始化的牌局
+          // 新局／開局：gameState 為 null 時重置 revision；非房主清空桌面等房主發牌；房主也歸零 revision 以便 initGame 發布
           useEffect(() => {
             if (!onlineSession || screen !== 'game' || !roomData || !firebaseUser) return;
             if (roomData.gameState) return;
-            if (roomData.hostUid === firebaseUser.uid) return;
+            // 任何客戶端：新局清空期間作廢舊 revision／在飛發布，避免卡在「等待房主發牌」或把上局寫回
             gameRevisionRef.current = 0; turnSeqRef.current = 0;
+            publishGenRef.current += 1;
+            publishInFlightRef.current = false;
+            publishDirtyRef.current = false;
+            publishRetryRef.current = 0;
             gameRoundRef.current = roomData.round || 0;
             victoryLocalRef.current = false;
             lastActorUidRef.current = null;
             gameOverRef.current = false;
+            if (roomData.hostUid === firebaseUser.uid) return; // 房主由 initGame 負責桌面，此處只歸零序號
             // 先清空本機桌面；勝場以房主下一份快照為準（整場結束會是 {}，中場下一局會帶累計）
             winsRef.current = {};
             scoreDoneKeysRef.current = new Set();
@@ -2552,8 +2690,9 @@
             if (snapshot.revision <= gameRevisionRef.current) return;
             // 換局（round 變更）時一律套用房主新牌局，不做 turnSeq 拒絕（否則會留下上局手牌／C 區／勝場）
             // 同局回合權威：
-            // 1) 本機 turnSeq 較新 → 遠端是舊快照，不套用，只跟上 revision 並觸發本機再發布。
+            // 1) 本機 turnSeq 較新且仍握行動權 → 遠端是舊快照，不套用，只跟上 revision 並觸發本機再發布。
             // 2) 本機仍握有行動權且同 turnSeq、非本人寫入 → 不套用。
+            // 3) 本機 turnSeq 較新但已無行動權 → 視為本機發布失敗的分叉，改以遠端為準（避免 Guest 永久卡死、讀不到之後行動）。
             if (!roundChanged) {
               const stLocal = stateRef.current;
               const hostOwns = !!(roomData && roomData.hostUid === firebaseUser.uid);
@@ -2567,10 +2706,13 @@
               const snapSeq = snapshot.turnSeq || 0;
               const localSeq = turnSeqRef.current || 0;
               if (localPlayers.length > 0 && snapSeq < localSeq) {
-                gameRevisionRef.current = Math.max(gameRevisionRef.current, snapshot.revision);
-                lockRef.current = false;
-                setSyncTick(t => t + 1);
-                return;
+                if (iOwnLocalTurn) {
+                  gameRevisionRef.current = Math.max(gameRevisionRef.current, snapshot.revision);
+                  lockRef.current = false;
+                  setSyncTick(t => t + 1);
+                  return;
+                }
+                // 無行動權卻序號超前：放棄本機分叉，套用遠端
               }
               if (iOwnLocalTurn && localPlayers.length > 0) {
                 if (snapSeq === localSeq && snapshot.sourceUid && snapshot.sourceUid !== firebaseUser.uid) {
@@ -2583,6 +2725,7 @@
             } else {
               scoreDoneKeysRef.current = new Set();
             }
+            applyingRemoteGameRef.current = true;
             const incomingPlayers = Array.isArray(snapshot.players)
               ? snapshot.players
               : Object.values(snapshot.players || {});
@@ -2643,13 +2786,20 @@
               setPlayedCardArena(snapshot.playedCardArena || null);
               setRecentArenaCards(Array.isArray(snapshot.recentArenaCards) ? snapshot.recentArenaCards.slice(0, 6) : []);
               setArenaFanOpen(false);
-              setArenaFocus(null);
+              // 不清除 arenaFocus：遠端快照頻繁套用時會讓「點面前牌放大」瞬間關掉
               setSeerSeen(null);
               setDrunkSeen(null);
               setSelectedHandCard(null);
-              setInteractionModal(null);
-              setIsReturningCenterCard(false);
-              pendingArenaCardRef.current = null;
+              // 僅在回合已不屬於本機真人時才關閉互動彈窗，避免 Guest 出刺客等牌中途被遠端套用清掉彈窗而卡死
+              {
+                const incomingActor = normalizedPlayers[snapshot.currentTurnIndex];
+                const stillMyHumanTurn = !!(incomingActor && !incomingActor.isAI && firebaseUser && incomingActor.uid === firebaseUser.uid);
+                if (!stillMyHumanTurn) {
+                  setInteractionModal(null);
+                  setIsReturningCenterCard(false);
+                  pendingArenaCardRef.current = null;
+                }
+              }
               setBroadcastActionRaw(snapshot.broadcastAction || '');
               setBroadcastResult(snapshot.broadcastResult || '');
               setBroadcastReveal(snapshot.broadcastReveal || '');
@@ -2664,13 +2814,29 @@
               setActionLocked(false);
               setGameReady(true);
             });
-          }, [roomData && roomData.gameState, screen, onlineSession, firebaseUser]);
+            // 下一幀再允許發布，避免用「套用前的本機舊狀態」覆寫剛寫入的遠端快照
+            setTimeout(() => { applyingRemoteGameRef.current = false; }, 0);
+          }, [roomData && roomData.gameState, screen, onlineSession, firebaseUser, forceApplyTick]);
+
+          // Guest 救援：RTDB 已有牌局但本機一直 gameReady=false（例如錯過套用）→ 強制重跑套用
+          useEffect(() => {
+            if (!onlineSession || screen !== 'game' || !firebaseUser || !roomData) return;
+            if (gameReady) return;
+            const gs = roomData.gameState;
+            if (!gs || !(gs.revision > 0)) return;
+            // 降低 revision 門檻並觸發 apply effect 重跑
+            gameRevisionRef.current = Math.max(0, (gs.revision || 1) - 1);
+            if (gs.sourceUid === firebaseUser.uid) {
+              setGameReady(true);
+            } else {
+              setForceApplyTick(t => t + 1);
+            }
+          }, [onlineSession, screen, gameReady, roomData && roomData.gameState, firebaseUser]);
 
           useEffect(() => {
-            if (!onlineSession || screen !== 'game' || !gameReady || !firebaseUser || !roomCode || applyingRemoteGameRef.current) {
-              applyingRemoteGameRef.current = false;
-              return;
-            }
+            // 正在套用遠端快照：不要發布，也不可把 flag 清掉（否則會立刻用舊本機狀態覆寫）
+            if (!onlineSession || screen !== 'game' || !gameReady || !firebaseUser || !roomCode) return;
+            if (applyingRemoteGameRef.current) return;
             // 房主已清空 gameState 準備新局：僅非房主不可把上局手牌寫回去；房主必須能寫入 initGame 後的新狀態
             const hostOwnsRoom = roomData && roomData.hostUid === firebaseUser.uid;
             if (roomData && roomData.gameState == null && !hostOwnsRoom) return;
@@ -2683,9 +2849,12 @@
             //   (b) 剛結束自己的回合（lastActorUid 仍是自己）——必須把「出牌結果 + proceedToNext 後的 currentTurnIndex」寫出去，
             //       否則房主永遠停在 Guest 回合，下一位 AI／玩家不會動。
             // 發布成功後 lastActorUid 會改成當前 actor（AI 為 null），Guest 即失去再寫入權，不會獨跑 AI。
+            // 房主不可在「其他真人回合中」重播／覆寫狀態（否則會與 Guest 的刺客等互動結算搶 revision，把已換人的快照蓋回中途狀態，造成 Guest 卡死）。
+            const isSelfHumanTurn = !!actor && !actor.isAI && actorUid === firebaseUser.uid;
+            const justActed = lastActorUidRef.current === firebaseUser.uid;
             const mayPublish = hostOwnsRoom
-              || (!!actor && !actor.isAI && actorUid === firebaseUser.uid)
-              || (lastActorUidRef.current === firebaseUser.uid);
+              ? (!actor || actor.isAI || isSelfHumanTurn || justActed || !!gameOver)
+              : (isSelfHumanTurn || justActed);
             if (!mayPublish) return;
             if (gameSyncTimerRef.current) clearTimeout(gameSyncTimerRef.current);
             gameSyncTimerRef.current = setTimeout(async () => {
@@ -2961,6 +3130,7 @@
               if (witchOwner) { winnerText += ` & ${witchOwner.name} (女巫共同獲勝)`; winnerIds.push(witchOwner.id); }
             }
             setGameOver(true);
+            lastRoundWinnerIdsRef.current = [...new Set(winnerIds)];
             // 勝場：每位獲勝者（含共同獲勝）得 1 個月亮標記
             // 3–4 人場累計 3 勝整場；5–6 人場累計 2 勝整場
             const playerCount = (st.players || []).length;
@@ -4007,14 +4177,12 @@
                 '',
                 {
                   privateTo: [humanPlayerId],
-                  privateFx: false,
+                  privateFx: true,
                   publicAction: `你 對 ${target.name} 打出了(2)【先知】`,
                   publicResult: '秘密檢視完成',
                 }
               );
               setSeerSeen(targetHand[0] ? { targetId, card: targetHand[0] } : null);
-              setInteractionModal({ type: 'INFO', title: '先知檢視結果', infoCard: targetHand[0] || null, infoTarget: target });
-              return;
               advanceTurn();
             } else if (type === 'TAX_COLLECTOR') {
               const targetHand = playerHands[targetId] || [];
@@ -4428,7 +4596,8 @@
                   const roster = (after && after.gamePlayers) || (roomData && roomData.gamePlayers) || INITIAL_PLAYERS;
                   setTimeout(() => {
                     if (cancelled) return;
-                    if (gameRevisionRef.current > 0) return;
+                    // 新局 gameState 已清空；強制歸零後發牌（不可因上局 revision 殘留而跳過）
+                    gameRevisionRef.current = 0;
                     initGame(roster);
                   }, 80);
                 }
@@ -4655,7 +4824,7 @@
               
               <div className="mobile-container h-full w-full max-w-[480px] mx-auto flex flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 relative">
 
-                {/* A區: 頂部狀態列 */}
+                {/* A區: 版本設定區 */}
                 <header className="h-[4.5%] min-h-[32px] bg-slate-900/90 backdrop-blur border-b border-cyan-900/40 px-3 flex items-center justify-between z-[80] shrink-0">
                   <div className="flex items-center">
                     <span className="text-[10px] font-mono font-bold text-cyan-400 tracking-tight">
@@ -4663,6 +4832,17 @@
                     </span>
                   </div>
                   <div className="flex items-center space-x-1.5">
+                    <button
+                      onClick={() => {
+                        if (onlineSession) setScreen('lobby');
+                        else { setOnlineSession(false); setScreen('home'); }
+                      }}
+                      className="flex items-center justify-center h-6 gap-0.5 whitespace-nowrap bg-slate-800/90 border border-slate-500/50 text-slate-300 text-[10px] font-bold px-1.5 rounded-md shadow-sm active:scale-95"
+                      title="返回大廳"
+                    >
+                      <i className="fa-solid fa-arrow-left text-[9px]"></i>
+                      <span>大廳</span>
+                    </button>
                     <button onClick={() => setShowBroadcast(v => !v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${showBroadcast ? 'bg-emerald-500/25 border-emerald-400/70 text-emerald-200' : 'bg-slate-800/90 border-slate-600/60 text-slate-400'}`}>動態</button>
                     {[0.5].map(v => (
                       <button key={v} onClick={() => changeSpeed(v)} className={`flex items-center justify-center h-6 whitespace-nowrap border text-[10px] font-mono font-bold px-1.5 rounded-md shadow-sm active:scale-95 ${speed === v ? 'bg-sky-500/25 border-sky-400/80 text-sky-200' : 'bg-slate-800/90 border-slate-500/50 text-slate-400'}`}>{v}x</button>
@@ -4678,27 +4858,90 @@
                   </div>
                 </header>
 
-                {/* B區: 玩家頭像區 */}
-                <section className="h-[10.5%] min-h-[64px] bg-slate-900/60 border-b border-slate-800/80 px-1.5 py-1.5 flex items-center overflow-hidden gap-1 shrink-0">
-                  {players.map((player, idx) => {
+                {/* B區: 動態區（固定一列，可由 A 區「動態」開關；可點播放當前動畫） */}
+                {showBroadcast && (
+                  <div className="shrink-0 px-2 py-1 border-b border-slate-800/80 bg-slate-900/70 z-[70]">
+                    <div key={broadcastEvent ? broadcastEvent.key : 'plain'} className={`w-full bg-slate-900/95 border px-2 py-1 rounded-lg shadow flex items-stretch gap-1.5 min-h-[36px] ${broadcastEvent ? (broadcastEvent.type === 'out' ? 'event-out' : 'event-revive') : 'border-emerald-500/50'}`}>
+                      <div className="flex-1 min-w-0 flex flex-col justify-center">
+                        <div className="flex items-center space-x-1.5 overflow-hidden">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                          <span className="text-[11px] font-black text-emerald-300 truncate tracking-wide"><RichLog text={visibleBroadcastAction} nameClass="text-amber-300" localPlayerName={onlineSession ? humanPlayerName : null} /></span>
+                          {privateBroadcastVisible && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-300"><i className="fa-solid fa-lock mr-0.5"></i>僅你可見</span>}
+                          {broadcastEvent && (
+                            <span className={`ml-auto shrink-0 flex items-center text-[9px] font-black ${broadcastEvent.type === 'out' ? 'text-rose-300' : 'text-emerald-300'}`}>
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 animate-pulse ${broadcastEvent.type === 'out' ? 'bg-rose-400' : 'bg-emerald-400'}`}></span>{broadcastEvent.type === 'out' ? '出局' : '復活'}
+                            </span>
+                          )}
+                        </div>
+                        {(visibleBroadcastResult || visibleBroadcastReveal) && (
+                          <div className="text-[10px] font-bold text-amber-300 truncate pl-3.5 mt-0.5">
+                            <RichLog text={visibleBroadcastResult} nameClass="text-amber-300" localPlayerName={onlineSession ? humanPlayerName : null} />
+                            {visibleBroadcastReveal && <span className="text-fuchsia-300 ml-1"><i className="fa-solid fa-eye mr-0.5"></i><RichLog text={visibleBroadcastReveal} nameClass="text-fuchsia-100" localPlayerName={onlineSession ? humanPlayerName : null} /></span>}
+                          </div>
+                        )}
+                      </div>
+                      {lastBroadcastFx && (
+                        <button
+                          type="button"
+                          onClick={playBroadcastFx}
+                          className="shrink-0 self-center flex items-center justify-center w-8 h-8 rounded-full bg-sky-500/20 border border-sky-400/60 text-sky-300 active:scale-95"
+                          title="播放此動態動畫"
+                        >
+                          <i className="fa-solid fa-play text-[11px]"></i>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* C區: 牌庫數目區（點牌庫／暗牌可開彈窗，同現有） */}
+                <div className="shrink-0 px-2 py-1 border-b border-slate-800/80 bg-slate-900/50 flex items-center justify-between gap-1 z-[70]">
+                  <div className="flex items-center space-x-1 bg-slate-900/90 border border-amber-500/40 px-2 py-0.5 rounded-full text-[9.5px] shadow">
+                    <i className="fa-solid fa-moon text-amber-400"></i>
+                    <span className="text-slate-400">月亮</span>
+                    <span className="font-mono text-amber-400 font-bold">{moonPhase}/3</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-cyan-500/40 px-2 rounded-full text-[9.5px] shadow">
+                      <i className="fa-solid fa-box-archive text-cyan-400"></i>
+                      <span className="font-bold text-cyan-300">備用 <span className="font-mono text-cyan-400">{reserveCards.filter(Boolean).length}</span></span>
+                    </div>
+                    <button
+                      onClick={() => { setCenterPickMode(false); setIsCenterCardsModalOpen(true); }}
+                      className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
+                    >
+                      <i className="fa-solid fa-eye text-amber-400"></i>
+                      <span className="font-bold text-amber-300">暗牌 <span className="font-mono text-amber-400">{centerCards.filter(Boolean).length}</span></span>
+                    </button>
+                    <button
+                      onClick={() => setIsDeckModalOpen(true)}
+                      className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
+                    >
+                      <i className="fa-solid fa-layer-group text-amber-400"></i>
+                      <span className="font-bold text-amber-300">牌庫 <span className="font-mono text-amber-400">{deck.length}</span></span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* D區: 除自己以外的玩家（左＝下家 … 右＝上家；名字與框底多留空白） */}
+                <section className="shrink-0 bg-slate-900/60 border-b border-slate-800/80 px-1 py-0.5 flex items-center overflow-hidden gap-1" style={{ minHeight: 50 }}>
+                  {otherPlayersOrdered.map((player) => {
+                    const idx = players.findIndex(p => p.id === player.id);
                     const isTurn = currentTurnIndex === idx;
                     const isDead = player.status === '出局';
                     return (
-                      <div 
+                      <div
                         key={player.id}
-                        onClick={() => setViewPlayerId(player.id)}
-                        className={`cursor-pointer player-box min-w-0 basis-0 flex-1 bg-slate-800/70 rounded-lg p-1 flex flex-col items-center justify-center relative transition-all duration-300 ${
+                        className={`player-box min-w-0 basis-0 flex-1 bg-slate-800/70 rounded-lg px-0.5 pt-0.5 pb-1.5 flex flex-col items-center justify-center relative transition-all duration-300 ${
                           isTurn ? 'border-2 border-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.65)] scale-[1.02]' : 'border border-slate-700/60 opacity-85'
                         } ${isDead ? 'grayscale opacity-30' : ''}`}
                       >
                         {(() => {
-                          const fronts = getFrontCards(player);
-                          const activeN = fronts.filter(c => isCardActive(player, c)).length;
+                          const activeN = getFrontCards(player).filter(c => isCardActive(player, c)).length;
                           const winN = Math.min(wins[player.id] || 0, 2);
                           return (
-                            <div className="w-full h-[11px] shrink-0 mb-0.5 flex flex-nowrap items-center gap-[3px] overflow-hidden whitespace-nowrap text-[8px] leading-none font-bold">
+                            <div className="w-full h-[10px] shrink-0 flex flex-nowrap items-center justify-center gap-[2px] overflow-hidden whitespace-nowrap text-[7px] leading-none font-bold">
                               {winN > 0 && <span className="flex items-center gap-px text-amber-300">{Array.from({ length: winN }).map((_, i) => <i key={i} className="fa-solid fa-moon"></i>)}</span>}
-                              {fronts.length > 0 && <span className="flex items-center text-amber-300"><span>🃏</span><span>{fronts.length}</span></span>}
                               {activeN > 0 && <span title="生效中" className="flex items-center text-emerald-300"><i className="fa-solid fa-bolt"></i><span>{activeN}</span></span>}
                               {player.protected && !isDead && <span className="text-cyan-300"><i className="fa-solid fa-shield-halved"></i></span>}
                               {witchTargetOwner && witchTargetOwner.targetId === player.id && <span className="text-purple-300"><i className="fa-solid fa-wand-magic-sparkles"></i></span>}
@@ -4706,17 +4949,17 @@
                             </div>
                           );
                         })()}
-                        <div className={`w-7 h-7 shrink-0 rounded-full bg-gradient-to-tr ${player.gradient} p-0.5 shadow mb-0.5`}>
+                        <div className={`w-6 h-6 shrink-0 rounded-full bg-gradient-to-tr ${player.gradient} p-0.5 shadow`}>
                           <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${player.seed}`} alt={player.name} className="w-full h-full rounded-full bg-slate-900" />
                         </div>
-                        <span className={`text-[9.5px] truncate w-full text-center leading-tight ${isTurn ? 'font-black text-emerald-300' : 'font-bold text-slate-200'}`}>{player.name}</span>
+                        <span className={`text-[9px] truncate w-full text-center leading-none mt-0.5 mb-0.5 ${isTurn ? 'font-black text-emerald-300' : 'font-bold text-slate-200'}`}>{player.name}</span>
                       </div>
                     );
                   })}
                 </section>
 
-                {/* C區: 中央戰場區 */}
-                <main ref={arenaRef} className="h-[55%] flex-1 bg-gradient-to-b from-slate-950 via-slate-900/80 to-slate-950 p-2 flex flex-col justify-between items-center relative overflow-hidden">
+                {/* E區: 面前區 — 上：各對手面前牌（對齊 D）；中：出牌／動畫；下：自己面前牌 */}
+                <main ref={arenaRef} className="flex-1 min-h-0 bg-gradient-to-b from-slate-950 via-slate-900/80 to-slate-950 px-1.5 pt-0 pb-0.5 flex flex-col relative overflow-hidden">
                   <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none"></div>
 
                   {/* 拖曳手牌時的放開區提示 */}
@@ -4726,60 +4969,65 @@
                     </div>
                   )}
 
-                  {/* C區頂部欄：雙行動態中控廣播（簡報 + 最終結果） */}
-                  {showBroadcast && <div className="w-full z-10 mb-1 px-1">
-                    <div key={broadcastEvent ? broadcastEvent.key : 'plain'} className={`w-full bg-slate-900/95 border p-2 rounded-xl shadow-lg flex flex-col justify-center ${broadcastEvent ? (broadcastEvent.type === 'out' ? 'event-out' : 'event-revive') : 'border-emerald-500/50'}`}>
-                      <div className="flex items-center space-x-1.5 overflow-hidden">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-                        <span className="text-[11.5px] font-black text-emerald-300 truncate tracking-wide"><RichLog text={visibleBroadcastAction} nameClass="text-amber-300" localPlayerName={onlineSession ? humanPlayerName : null} /></span>
-                        {privateBroadcastVisible && <span className="ml-auto shrink-0 text-[9px] font-bold text-sky-300"><i className="fa-solid fa-lock mr-0.5"></i>僅你可見</span>}
-                        {broadcastEvent && (
-                          <span className={`ml-auto shrink-0 flex items-center text-[9px] font-black ${broadcastEvent.type === 'out' ? 'text-rose-300' : 'text-emerald-300'}`}>
-                            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 animate-pulse ${broadcastEvent.type === 'out' ? 'bg-rose-400' : 'bg-emerald-400'}`}></span>{broadcastEvent.type === 'out' ? '出局' : '復活'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[10px] font-bold text-amber-300 line-clamp-2 pl-3.5 mt-0.5">
-                        <RichLog text={visibleBroadcastResult} nameClass="text-amber-300" localPlayerName={onlineSession ? humanPlayerName : null} />
-                      </div>
-                      {visibleBroadcastReveal && (
-                        <div className="text-[10px] font-bold text-fuchsia-300 line-clamp-2 pl-3.5 mt-0.5"><i className="fa-solid fa-eye mr-1"></i><RichLog text={visibleBroadcastReveal} nameClass="text-fuchsia-100" localPlayerName={onlineSession ? humanPlayerName : null} /></div>
-                      )}
+                  {/* E 上：其他玩家面前的牌（對齊 D：左＝下家 … 右＝上家；數值+名稱；最新一張較完整顯示） */}
+                  {!(gameOver && victoryDismissed) && (
+                    <div className="relative z-10 w-full flex gap-1 shrink-0 mb-0.5 items-start">
+                      {otherPlayersOrdered.map(player => {
+                        // 字級對齊中間出牌卡（title text-[9px]、數值 text-[10px]）；無牌不顯示「—」
+                        const fronts = getFrontCards(player);
+                        const step = 15;
+                        const foldedH = 26;
+                        const fullH = 52;
+                        const n = fronts.length;
+                        const stackH = n === 0 ? 0 : (n === 1 ? fullH : step * (n - 1) + fullH);
+                        return (
+                          <div key={player.id} className="min-w-0 basis-0 flex-1 flex flex-col items-center">
+                            {n === 0 ? null : (
+                            <div className="relative w-full max-w-[72px] mx-auto" style={{ height: stackH }}>
+                              {fronts.map((c, i) => {
+                                const active = isCardActive(player, c);
+                                const isLatest = i === n - 1;
+                                const borderCls = active ? 'border-2 border-emerald-400' : 'border-2 border-amber-400/80';
+                                if (isLatest) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={(c.id || c.title) + '-' + i}
+                                      onClick={(e) => { e.stopPropagation(); setArenaFocus({ ...c, playedBy: player.name }); }}
+                                      className={`absolute left-1/2 -translate-x-1/2 w-[96%] rounded-md bg-slate-900 shadow flex flex-col items-center justify-center px-0.5 py-0.5 active:scale-95 ${borderCls}`}
+                                      style={{ top: n === 1 ? 0 : step * (n - 1), height: fullH, zIndex: i + 1 }}
+                                      title={`${c.value} ${c.title}${active ? '（生效中）' : ''}`}
+                                    >
+                                      <span className="font-mono font-black text-amber-300 text-[10px] leading-none tabular-nums">{c.value}</span>
+                                      <i className={`fa-solid ${c.icon || 'fa-circle'} text-amber-400 text-[11px] my-0.5`}></i>
+                                      <span className="text-[9px] font-black text-amber-100 leading-none text-center truncate w-full px-0.5">{c.title}</span>
+                                    </button>
+                                  );
+                                }
+                                return (
+                                  <button
+                                    type="button"
+                                    key={(c.id || c.title) + '-' + i}
+                                    onClick={(e) => { e.stopPropagation(); setArenaFocus({ ...c, playedBy: player.name }); }}
+                                    className={`absolute left-1/2 -translate-x-1/2 w-[96%] rounded-md bg-slate-900 shadow flex items-start overflow-hidden active:scale-95 ${borderCls}`}
+                                    style={{ top: i * step, height: foldedH, zIndex: i + 1 }}
+                                    title={`${c.value} ${c.title}${active ? '（生效中）' : ''}`}
+                                  >
+                                    <span className="w-[20px] shrink-0 text-center font-mono font-black text-amber-300 text-[10px] leading-none pt-0.5 tabular-nums">{c.value}</span>
+                                    <span className="flex-1 min-w-0 text-center font-black text-amber-100 text-[9px] leading-none pt-0.5 truncate pr-0.5">{c.title}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>}
+                  )}
 
-                  {/* 場上卡牌展示 */}
-                  <div className="w-full flex-1 flex items-center justify-center relative z-10">
-                    {/* C區左上角：月亮進度；右上角（由左至右）：備用牌、暗牌、牌庫 */}
-                    <div className="absolute left-0 top-0 z-20 flex flex-col space-y-1">
-                      <div className="flex items-center space-x-1 bg-slate-900/90 border border-amber-500/40 px-2 py-0.5 rounded-full text-[9.5px] shadow">
-                        <i className="fa-solid fa-moon text-amber-400"></i>
-                        <span className="text-slate-400">月亮</span>
-                        <span className="font-mono text-amber-400 font-bold">{moonPhase}/3</span>
-                      </div>
-                      
-                    </div>
-                    <div className="absolute right-0 top-0 z-20 flex flex-row items-center space-x-1">
-                      <div className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-cyan-500/40 px-2 rounded-full text-[9.5px] shadow">
-                        <i className="fa-solid fa-box-archive text-cyan-400"></i>
-                        <span className="font-bold text-cyan-300">備用牌 <span className="font-mono text-cyan-400">{reserveCards.filter(Boolean).length}</span></span>
-                      </div>
-                      <button
-                        onClick={() => { setCenterPickMode(false); setIsCenterCardsModalOpen(true); }}
-                        className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
-                      >
-                        <i className="fa-solid fa-eye text-amber-400"></i>
-                        <span className="font-bold text-amber-300">暗牌 <span className="font-mono text-amber-400">{centerCards.filter(Boolean).length}</span></span>
-                      </button>
-                      <button
-                        onClick={() => setIsDeckModalOpen(true)}
-                        className="flex items-center justify-center h-[22px] space-x-1 bg-slate-900/90 border border-amber-500/50 hover:border-amber-400 px-2 rounded-full text-[9.5px] shadow active:scale-95 transition-all cursor-pointer"
-                      >
-                        <i className="fa-solid fa-layer-group text-amber-400"></i>
-                        <span className="font-bold text-amber-300">牌庫 <span className="font-mono text-amber-400">{deck.length}</span></span>
-                      </button>
-                    </div>
-
+                  {/* E 中：本回合打出／攤牌／等待 */}
+                  <div className="w-full flex-1 min-h-0 flex items-center justify-center relative z-10">
                     {(gameOver && victoryDismissed) ? (
                       <div className="absolute inset-x-0 top-7 bottom-0 overflow-y-auto scrollbar-none px-0.5 space-y-1.5 text-[10px]">
                         <div className="flex items-center justify-between">
@@ -4823,83 +5071,29 @@
                           </div>
                         </div>
                       </div>
-                    ) : (recentArenaCards.length > 0 || playedCardArena) ? (
+                    ) : (playedCardArena || (recentArenaCards && recentArenaCards[0])) ? (
                       (() => {
-                        const stack = (recentArenaCards.length > 0 ? recentArenaCards : (playedCardArena ? [playedCardArena] : [])).slice(0, 6);
+                        const c = playedCardArena || recentArenaCards[0];
                         return (
-                      <div className="relative flex flex-col items-center justify-center -my-1 select-none">
-                        <div className={`relative ${arenaFanOpen ? 'h-[200px] w-[min(100%,320px)]' : 'h-[168px] w-[130px]'}`}>
-                          {stack.map((c, i) => {
-                            const n = stack.length;
-                            const fan = arenaFanOpen;
-                            const x = fan ? (i - (n - 1) / 2) * 48 : i * 8;
-                            const y = fan ? Math.abs(i - (n - 1) / 2) * 4 : i * 6;
-                            const rot = fan ? (i - (n - 1) / 2) * 6 : i * 1.5;
-                            const z = n - i;
-                            return (
-                              <button
-                                type="button"
-                                key={`${c.id || c.title}-${c.arenaAt || i}`}
-                                onClick={() => { if (!arenaFanOpen) { setArenaFanOpen(true); return; } setArenaFocus(c); }}
-                                className={`absolute left-1/2 top-0 origin-bottom rounded-xl border-2 border-amber-400/90 bg-slate-900 shadow-xl overflow-hidden active:scale-95 ${i === 0 && !fan ? 'animate-card-play' : ''}`}
-                                style={{
-                                  width: fan ? 72 : 96,
-                                  height: fan ? 100 : 140,
-                                  transform: `translate(calc(-50% + ${x}px), ${y}px) rotate(${rot}deg)`,
-                                  zIndex: z,
-                                  transition: 'transform 1s cubic-bezier(0.22,1,0.36,1), width 1s cubic-bezier(0.22,1,0.36,1), height 1s cubic-bezier(0.22,1,0.36,1)',
-                                }}
-                              >
-                                <div className="h-full p-1.5 flex flex-col justify-between">
-                                  <div className="flex items-start justify-between gap-0.5">
-                                    <span className="bg-amber-500 text-slate-950 text-[10px] font-black min-w-[18px] h-[18px] px-0.5 rounded-full flex items-center justify-center font-mono">{c.value}</span>
-                                    {c.isMoon && <span className="text-[8px] text-amber-300 font-bold">月</span>}
-                                  </div>
-                                  <div className="flex-1 flex items-center justify-center">
-                                    <i className={`fa-solid ${c.icon || 'fa-circle'} text-lg text-amber-400/85`}></i>
-                                  </div>
-                                  <div className="text-center">
-                                    <div className="text-[9px] font-black text-amber-200 leading-tight truncate">{c.title}</div>
-                                    <div className="text-[8px] text-slate-400 truncate">{c.playedBy || ''}</div>
-                                  </div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                          {!arenaFanOpen && stack.length > 1 && (
-                            <button type="button" aria-label="展開最近出牌" onClick={() => setArenaFanOpen(true)}
-                              className="absolute -right-6 top-1/2 -translate-y-1/2 z-30 px-1 py-2 rounded-r-lg bg-amber-500/20 border border-amber-400/50 text-amber-200 text-[9px] font-black"
-                              style={{ writingMode: 'vertical-rl' }}>展開</button>
-                          )}
-                        </div>
-                        {arenaFanOpen ? (
-                          <button type="button" onClick={() => { setArenaFanOpen(false); setArenaFocus(null); }} className="mt-1 text-[10px] font-bold text-slate-400 underline">收合</button>
-                        ) : (
-                          <div className="mt-0.5 text-[9px] text-slate-500 font-bold">最近 {stack.length}/6 · 點選展開</div>
-                        )}
-                        {arenaFocus && (
-                          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55" onClick={() => setArenaFocus(null)}>
-                            <div className="relative w-40 h-[210px] bg-slate-900 border-2 border-amber-400 rounded-2xl p-3 flex flex-col justify-between shadow-2xl animate-arena-focus" onClick={e => e.stopPropagation()}>
-                              <div className="flex justify-between items-start">
-                                <span className="bg-amber-500 text-slate-950 text-base font-black w-8 h-8 rounded-full flex items-center justify-center font-mono">{arenaFocus.value}</span>
-                                {arenaFocus.isMoon && <span className="text-[10px] bg-slate-800 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">{arenaFocus.category || '月亮'}</span>}
+                          <button
+                            type="button"
+                            onClick={() => setArenaFocus(c)}
+                            className="relative w-[96px] h-[140px] rounded-xl border-2 border-amber-400/90 bg-slate-900 shadow-xl overflow-hidden active:scale-95 animate-card-play select-none"
+                          >
+                            <div className="h-full p-1.5 flex flex-col justify-between">
+                              <div className="flex items-start justify-between gap-0.5">
+                                <span className="bg-amber-500 text-slate-950 text-[10px] font-black min-w-[18px] h-[18px] px-0.5 rounded-full flex items-center justify-center font-mono">{c.value}</span>
+                                {c.isMoon && <span className="text-[8px] text-amber-300 font-bold">月</span>}
                               </div>
-                              <div className="w-full h-16 my-1 rounded-lg bg-slate-800 border border-slate-700/70 flex items-center justify-center">
-                                <i className={`fa-solid ${arenaFocus.icon || 'fa-circle'} text-4xl text-amber-400/85`}></i>
+                              <div className="flex-1 flex items-center justify-center">
+                                <i className={`fa-solid ${c.icon || 'fa-circle'} text-lg text-amber-400/85`}></i>
                               </div>
                               <div className="text-center">
-                                <h3 className="text-sm font-black text-amber-300">{arenaFocus.title}</h3>
-                                {arenaFocus.desc && <p className="text-[9px] text-slate-300 line-clamp-3 mt-0.5 leading-tight">{arenaFocus.desc}</p>}
+                                <div className="text-[9px] font-black text-amber-200 leading-tight truncate">{c.title}</div>
+                                <div className="text-[8px] text-slate-400 truncate">{c.playedBy || ''}</div>
                               </div>
-                              <div className="pt-1.5 border-t border-amber-500/40 flex justify-between items-center text-[10px]">
-                                <span className="text-amber-400 font-bold">{arenaFocus.isMoon ? '翻開者' : '出牌者'}</span>
-                                <span className="text-slate-200 font-black">{arenaFocus.playedBy}</span>
-                              </div>
-                              <button type="button" onClick={() => setArenaFocus(null)} className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-slate-800 border border-slate-600 text-slate-300 text-xs font-black">✕</button>
                             </div>
-                          </div>
-                        )}
-                      </div>
+                          </button>
                         );
                       })()
                     ) : (
@@ -4908,14 +5102,72 @@
                         等待玩家行動...
                       </div>
                     )}
+                  </div>
+
+                  {/* E 下：自己面前的牌（由左至右完整顯示、少少重疊；最新在最右且最頂） */}
+                  {!(gameOver && victoryDismissed) && (() => {
+                    const me = players.find(p => p.id === humanPlayerId);
+                    const fronts = me ? getFrontCards(me) : [];
+                    if (!fronts.length) return <div className="shrink-0 h-1" />;
+                    const cardW = 56;
+                    const overlap = 18;
+                    const totalW = cardW + Math.max(0, fronts.length - 1) * (cardW - overlap);
+                    return (
+                      <div className="relative z-10 w-full shrink-0 flex justify-center py-1 px-1">
+                        <div className="relative" style={{ width: totalW, height: 72 }}>
+                          {fronts.map((c, i) => {
+                            const active = isCardActive(me, c);
+                            return (
+                              <button
+                                type="button"
+                                key={(c.id || c.title) + '-' + i}
+                                onClick={(e) => { e.stopPropagation(); setArenaFocus({ ...c, playedBy: me.name }); }}
+                                className={`absolute top-0 rounded-md border-2 bg-slate-900 shadow flex flex-col items-center justify-center px-1 py-1 active:scale-95 ${active ? 'border-emerald-400' : 'border-amber-400/80'}`}
+                                style={{ left: i * (cardW - overlap), width: cardW, height: 70, zIndex: i + 1 }}
+                                title={`${c.value} ${c.title}${active ? '（生效中）' : ''}`}
+                              >
+                                <span className="font-mono font-black text-amber-300 text-[10px] leading-none">{c.value}</span>
+                                <i className={`fa-solid ${c.icon || 'fa-circle'} text-amber-400 text-[11px] my-0.5`}></i>
+                                <span className="text-[9px] font-black text-amber-100 leading-none text-center truncate w-full">{c.title}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 點面前的牌：完整檢視（數值／圖示／名稱／說明） */}
+                  {arenaFocus && (
+                    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55" onClick={() => setArenaFocus(null)}>
+                      <div className="relative w-40 h-[210px] bg-slate-900 border-2 border-amber-400 rounded-2xl p-3 flex flex-col justify-between shadow-2xl animate-arena-focus" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-start">
+                          <span className="bg-amber-500 text-slate-950 text-base font-black w-8 h-8 rounded-full flex items-center justify-center font-mono">{arenaFocus.value}</span>
+                          {arenaFocus.isMoon && <span className="text-[10px] bg-slate-800 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-bold">{arenaFocus.category || '月亮'}</span>}
+                        </div>
+                        <div className="w-full h-16 my-1 rounded-lg bg-slate-800 border border-slate-700/70 flex items-center justify-center">
+                          <i className={`fa-solid ${arenaFocus.icon || 'fa-circle'} text-4xl text-amber-400/85`}></i>
+                        </div>
+                        <div className="text-center">
+                          <h3 className="text-sm font-black text-amber-300">{arenaFocus.title}</h3>
+                          {arenaFocus.desc && <p className="text-[9px] text-slate-300 line-clamp-3 mt-0.5 leading-tight">{arenaFocus.desc}</p>}
+                        </div>
+                        <div className="pt-1.5 border-t border-amber-500/40 flex justify-between items-center text-[10px]">
+                          <span className="text-amber-400 font-bold">{arenaFocus.isMoon ? '翻開者' : '出牌者'}</span>
+                          <span className="text-slate-200 font-black">{arenaFocus.playedBy || ''}</span>
+                        </div>
+                        <button type="button" onClick={() => setArenaFocus(null)} className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-slate-800 border border-slate-600 text-slate-300 text-xs font-black">✕</button>
+                      </div>
+                    </div>
+                  )}
+
               {replay && replay.fx && <FxOverlay key={`r${replay.n}`} fx={replay.fx} onSkip={closeReplay} replay={{}} localPlayerId={humanPlayerId} />}
               {!replay && fx && (!fx.privateTo?.length || fx.privateTo.includes(humanPlayerId)) && !(gameOver && victoryDismissed) && (
                 <FxOverlay key={fx.key} fx={fx} onSkip={skipFx} localPlayerId={humanPlayerId} />
               )}
-                  </div>
                 </main>
 
-                {/* D區: 底部手牌與操作區 */}
+                {/* F區: 手牌區（自己頭像固定左上） */}
                 <footer className="h-[30%] min-h-[210px] bg-gradient-to-t from-slate-950 via-slate-900 to-slate-950 border-t border-slate-800 p-2 relative shrink-0 flex items-center justify-center">
                   {gameOver && victoryDismissed && (
                     <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/90">
@@ -4924,15 +5176,47 @@
                       </button>
                     </div>
                   )}
+
+                  {/* F區左上：自己的頭像與狀態 */}
+                  {(() => {
+                    const me = players.find(p => p.id === humanPlayerId);
+                    if (!me) return null;
+                    const isTurn = currentTurnIndex === players.findIndex(p => p.id === humanPlayerId);
+                    const isDead = me.status === '出局';
+                    const fronts = getFrontCards(me);
+                    const activeN = fronts.filter(c => isCardActive(me, c)).length;
+                    const winN = Math.min(wins[me.id] || 0, 2);
+                    return (
+                      <div
+                        className={`absolute left-1.5 top-1.5 z-20 flex items-center gap-1.5 rounded-lg px-1.5 py-1 bg-slate-800/90 border transition-all ${
+                          isTurn ? 'border-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.65)]' : 'border-slate-600/70'
+                        } ${isDead ? 'grayscale opacity-40' : ''}`}
+                      >
+                        <div className={`w-8 h-8 shrink-0 rounded-full bg-gradient-to-tr ${me.gradient} p-0.5 shadow`}>
+                          <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${me.seed}`} alt={me.name} className="w-full h-full rounded-full bg-slate-900" />
+                        </div>
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <span className={`text-[10px] font-black leading-none ${isTurn ? 'text-emerald-300' : 'text-sky-300'}`}>{me.name}</span>
+                          <div className="flex flex-nowrap items-center gap-[3px] overflow-hidden whitespace-nowrap text-[8px] leading-none font-bold">
+                            {winN > 0 && <span className="flex items-center gap-px text-amber-300">{Array.from({ length: winN }).map((_, i) => <i key={i} className="fa-solid fa-moon"></i>)}</span>}
+                            {activeN > 0 && <span className="flex items-center text-emerald-300"><i className="fa-solid fa-bolt"></i><span>{activeN}</span></span>}
+                            {me.protected && !isDead && <span className="text-cyan-300"><i className="fa-solid fa-shield-halved"></i></span>}
+                            {witchTargetOwner && witchTargetOwner.targetId === me.id && <span className="text-purple-300"><i className="fa-solid fa-wand-magic-sparkles"></i></span>}
+                            {witchTargetOwner && witchTargetOwner.witchOwnerId === me.id && <span className="text-pink-300"><i className="fa-solid fa-hat-wizard"></i></span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   
-                  {/* 拖曳提示（浮在 D 區上緣，不影響版面） */}
+                  {/* 拖曳提示（浮在 F 區上緣，不影響版面） */}
                   {myHand.filter(Boolean).length === 2 && isMyTurn && !gameOver && (
                     <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-30 pointer-events-none text-[10px] font-bold text-amber-300 bg-slate-950/80 border border-amber-500/40 px-2.5 py-0.5 rounded-full animate-pulse whitespace-nowrap">
                       <i className="fa-solid fa-hand-point-up mr-1"></i>{isReturningCenterCard ? '拖曳 1 張手牌到戰場，放回暗牌' : '拖曳手牌到戰場出牌'}
                     </div>
                   )}
 
-                  {/* D區左下：先知看過的玩家與牌（目標之後換過手牌則變淡並標「舊資訊」） */}
+                  {/* F區左下：先知看過的玩家與牌（目標之後換過手牌則變淡並標「舊資訊」） */}
                   {seerSeen && (() => {
                     const tp = players.find(p => p.id === seerSeen.targetId);
                     if (!tp) return null;
@@ -4952,7 +5236,7 @@
                     );
                   })()}
 
-                  {/* D區左下（先知上方）：醉漢檢視過的在場手牌（洗牌後換過手牌則變淡並標「舊資訊」） */}
+                  {/* F區左下（先知上方）：醉漢檢視過的在場手牌（洗牌後換過手牌則變淡並標「舊資訊」） */}
                   {drunkSeen && drunkSeen.length > 0 && (() => {
                     const rows = drunkSeen.map(e => {
                       const tp = players.find(p => p.id === e.targetId);
@@ -4973,28 +5257,6 @@
                             <span className="text-[7px] font-black text-slate-100 leading-none whitespace-nowrap">{c.title}</span>
                           </div>
                         ))}
-                      </div>
-                    );
-                  })()}
-
-                  {/* D區左側：自己所有放在「面前」的牌（簡約顯示；絕對定位，不影響版面） */}
-                  {(() => {
-                    const me = players.find(p => p.id === humanPlayerId) || { playedCards: [] };
-                    const front = getFrontCards(me);
-                    if (front.length === 0) return null;
-                    const drunkH = drunkSeen && drunkSeen.length ? 12 + drunkSeen.length * 18 : 0;
-                    return (
-                      <div className="absolute left-1.5 top-2 z-30 flex flex-col justify-start items-start gap-0.5 pointer-events-none overflow-hidden" style={{ bottom: 6 + (seerSeen ? 102 : 0) + drunkH }}>
-                        <span className="text-[8px] leading-none text-slate-400">🃏 面前 {front.length}</span>
-                        {front.map((c, i) => {
-                          const active = isCardActive(me, c);
-                          return (
-                            <span key={(c.id || c.title) + '-' + i} className={`text-[8px] leading-none bg-slate-900/75 border px-1 py-[2px] rounded whitespace-nowrap ${active ? 'border-emerald-400/70 text-emerald-200' : 'border-cyan-500/40 text-cyan-200'}`}>
-                              <span className="font-mono font-black text-amber-300">{c.value}</span> {c.title}
-                              {active && <span className="block text-[7px] text-emerald-300 font-bold mt-px">生效中</span>}
-                            </span>
-                          );
-                        })}
                       </div>
                     );
                   })()}
@@ -5160,7 +5422,7 @@
 
               {/* 遊戲結束勝利彈窗 */}
               {gameOver && winnerInfo && victoryReady && !victoryDismissed && (
-                <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+                <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[120] flex items-center justify-center p-4 animate-fade-in">
                   <div className="bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-400/80 rounded-2xl w-full max-w-xs p-5 shadow-2xl text-center relative overflow-y-auto max-h-[90vh]">
                     <i className="fa-solid fa-trophy text-5xl text-amber-400 mb-3 filter drop-shadow"></i>
                     <h2 className="text-xl font-black text-amber-300 mb-1">【{winnerInfo.winnerName}】</h2>
@@ -5197,7 +5459,7 @@
 
               {/* 彈窗：遊戲規則與角色技能 */}
               {isRulesModalOpen && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setIsRulesModalOpen(false)}>
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4" onClick={() => setIsRulesModalOpen(false)}>
                   <div className="bg-slate-900 border border-amber-500/50 rounded-2xl w-full max-w-sm p-4 shadow-2xl relative" onClick={e => e.stopPropagation()}>
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
                       <div className="flex items-center space-x-2">
@@ -5238,7 +5500,7 @@
 
               {/* 彈窗 1：牌庫角色清單（初始牌庫包含3張月亮牌） */}
               {isDeckModalOpen && (
-                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
                   <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
                       <div className="flex items-center space-x-2">
@@ -5292,7 +5554,7 @@
 
               {/* 彈窗 2：歷史紀錄 */}
               {isHistoryModalOpen && (
-                <div className="fixed inset-x-0 top-0 h-[100dvh] bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+                <div className="fixed inset-x-0 top-0 h-[100dvh] bg-slate-950/80 backdrop-blur-sm z-[120] flex items-center justify-center p-3">
                   <div className="bg-slate-900 border border-purple-500/50 rounded-2xl w-full max-w-xs h-full flex flex-col p-4 shadow-2xl relative">
                     <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3 shrink-0">
                       <div className="flex items-center space-x-2">
@@ -5382,71 +5644,30 @@
                 </div>
               )}
 
-              {/* 彈窗：玩家面前的牌 */}
-              {viewPlayerId !== null && (() => {
-                const vp = players.find(p => p.id === viewPlayerId);
-                if (!vp) return null;
-                const cards = getFrontCards(vp);
-                const isTarget = witchTargetOwner && witchTargetOwner.targetId === vp.id;
-                const isOwner = witchTargetOwner && witchTargetOwner.witchOwnerId === vp.id;
-                const ownerName = witchTargetOwner ? (players.find(p => p.id === witchTargetOwner.witchOwnerId) || {}).name : '';
-                const targetName = witchTargetOwner ? (players.find(p => p.id === witchTargetOwner.targetId) || {}).name : '';
-                return (
-                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewPlayerId(null)}>
-                    <div className="bg-slate-900 border border-cyan-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl" onClick={e => e.stopPropagation()}>
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
-                        <h3 className="text-sm font-bold text-cyan-300">{vp.name} 面前的牌 <span className="text-[10px] text-slate-400 font-normal">（共 {cards.length} 張）</span></h3>
-                        <button onClick={() => setViewPlayerId(null)} className="text-slate-400 hover:text-white text-base"><i className="fa-solid fa-xmark"></i></button>
-                      </div>
-                      <div className="flex flex-wrap gap-1 mb-3 text-[10px] font-bold">
-                        <span className={`px-1.5 py-0.5 rounded border ${vp.status === '存活' ? 'border-emerald-500/60 text-emerald-300' : 'border-slate-600 text-slate-400'}`}>{vp.status}</span>
-                        {vp.protected && vp.status === '存活' && <span className="px-1.5 py-0.5 rounded border border-cyan-400 text-cyan-300"><i className="fa-solid fa-shield-halved mr-1"></i>守護中</span>}
-                        {isTarget && <span className="px-1.5 py-0.5 rounded border border-purple-400 text-purple-300"><i className="fa-solid fa-wand-magic-sparkles mr-1"></i>女巫復活（與 {ownerName} 共同勝利）</span>}
-                        {isOwner && <span className="px-1.5 py-0.5 rounded border border-pink-400 text-pink-300"><i className="fa-solid fa-hat-wizard mr-1"></i>女巫持有者（綁定 {targetName}）</span>}
-                      </div>
-                      <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1 scrollbar-none">
-                        {cards.length > 0 ? cards.map((c, i) => (
-                          <div key={(c.id || c.title) + '-' + i} className="bg-slate-800/60 border border-slate-700 rounded-lg p-2 flex items-start space-x-2">
-                            <span className="bg-amber-500 text-slate-950 text-sm font-black w-7 h-7 rounded-full flex items-center justify-center shrink-0 font-mono">{c.value}</span>
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-amber-300">{c.title}{c.revealedBy === 'BOUNTY' && <span className="text-[10px] text-rose-300 ml-1">賞金獵人公開</span>}{isCardActive(vp, c) && <span className="text-[10px] text-emerald-300 ml-1 bg-emerald-950/80 border border-emerald-500/50 px-1 rounded font-bold">生效中</span>}</div>
-                              <div className="text-[10px] text-slate-300 leading-snug">{c.desc}</div>
-                            </div>
-                          </div>
-                        )) : (
-                          <div className="text-center text-slate-500 text-xs py-4">面前沒有牌</div>
-                        )}
-                      </div>
-                      <button onClick={() => setViewPlayerId(null)} className="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs py-2 rounded-xl border border-slate-700 transition">關閉</button>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 彈窗 3：暗牌區檢視／拿一還一選牌 */}
+              {/* 彈窗 3：暗牌區檢視／拿一還一選牌（放大版） */}
               {isCenterCardsModalOpen && (() => {
                 const nameOf = (id) => id === humanPlayerId ? '你' : ((players.find(p => p.id === id) || {}).name || '?');
                 return (
-                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-amber-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
-                      <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
+                  <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[120] flex items-center justify-center p-3">
+                    <div className="bg-slate-900 border border-amber-500/50 rounded-2xl w-full max-w-md p-5 shadow-2xl relative max-h-[92dvh] overflow-y-auto">
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
                         <div className="flex items-center space-x-2">
-                          <i className="fa-solid fa-moon text-amber-400"></i>
-                          <h3 className="text-sm font-bold text-amber-300">{centerPickMode ? '拿一還一：選擇要拿的暗牌' : '桌面暗牌區'}</h3>
+                          <i className="fa-solid fa-moon text-amber-400 text-lg"></i>
+                          <h3 className="text-base font-bold text-amber-300">{centerPickMode ? '拿一還一：選擇要拿的暗牌' : '桌面暗牌區'}</h3>
                         </div>
-                        <button onClick={closeCenterModal} className="text-slate-400 hover:text-white text-base">
+                        <button onClick={closeCenterModal} className="text-slate-400 hover:text-white text-xl px-1">
                           <i className="fa-solid fa-xmark"></i>
                         </button>
                       </div>
 
-                      <div className="text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-1.5 mb-3 leading-snug">
+                      <div className="text-[12px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 mb-4 leading-snug">
                         <i className="fa-solid fa-circle-info mr-1"></i>
                         {centerPickMode
                           ? '拿一還一：選 1 格暗牌拿走，再放回 1 張手牌到同一格；放回後直接結束回合。'
                           : '拿一還一：選 1 格暗牌拿走，再放回 1 張手牌到同一格；放回後直接結束回合。'}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 py-1">
+                      <div className="grid grid-cols-3 gap-3 py-1">
                         {centerMeta.map((m, i) => {
                           const card = centerCards[i];
                           const knowledge = centerKnowledge(m)[humanPlayerId];
@@ -5459,25 +5680,25 @@
                               <button
                                 disabled={!selectable}
                                 onClick={() => setPickSlot(i)}
-                                className={`w-full h-24 flex flex-col items-center justify-center relative transition ${
-                                  !card ? 'opacity-60' : ''
-                                } ${selected ? 'drop-shadow-[0_0_10px_rgba(245,158,11,0.95)]' : ''} ${selectable ? 'cursor-pointer hover:brightness-125' : 'cursor-default'}`}
+                                className={`w-full h-36 flex flex-col items-center justify-center relative transition rounded-xl border ${
+                                  selected ? 'border-amber-400 bg-amber-500/10' : 'border-slate-700/60 bg-slate-800/40'
+                                } ${!card ? 'opacity-60' : ''} ${selected ? 'drop-shadow-[0_0_12px_rgba(245,158,11,0.95)]' : ''} ${selectable ? 'cursor-pointer hover:brightness-125' : 'cursor-default'}`}
                               >
                                 {!card ? (
-                                  <span className="text-[9px] text-slate-400">已取走</span>
+                                  <span className="text-xs text-slate-400">已取走</span>
                                 ) : known ? (
                                   <div className={`flex flex-col items-center ${stale ? 'opacity-50' : ''}`}>
-                                    <span className="bg-cyan-500 text-slate-950 text-xs font-black w-5 h-5 rounded-full flex items-center justify-center font-mono">{knowledge.card.value}</span>
-                                    <i className={`fa-solid ${knowledge.card.icon} text-lg text-cyan-300 my-0.5`}></i>
-                                    <span className="text-[9px] font-black text-slate-100 leading-tight">{knowledge.card.title}</span>
-                                    <span className="text-[8px] text-amber-300 mt-0.5">{stale ? '舊資訊' : '你看過'}</span>
+                                    <span className="bg-cyan-500 text-slate-950 text-sm font-black w-7 h-7 rounded-full flex items-center justify-center font-mono">{knowledge.card.value}</span>
+                                    <i className={`fa-solid ${knowledge.card.icon} text-2xl text-cyan-300 my-1.5`}></i>
+                                    <span className="text-[12px] font-black text-slate-100 leading-tight">{knowledge.card.title}</span>
+                                    <span className="text-[10px] text-amber-300 mt-1">{stale ? '舊資訊' : '你看過'}</span>
                                   </div>
                                 ) : (
-                                  <FxBack cls="w-16 h-[88px]" moonCls="text-xl" label="未知" />
+                                  <FxBack cls="w-20 h-[112px]" moonCls="text-2xl" label="未知" />
                                 )}
                               </button>
-                              <span className="text-[9px] text-amber-300 font-bold mt-1">暗牌 {i + 1}</span>
-                              <div className="text-[8.5px] leading-tight text-center mt-0.5 space-y-0.5 w-full">
+                              <span className="text-[12px] text-amber-300 font-bold mt-2">暗牌 {i + 1}</span>
+                              <div className="text-[10px] leading-tight text-center mt-0.5 space-y-0.5 w-full">
                                 {m.swappedBy.length > 0
                                   ? <div className="text-rose-300 break-words"><i className="fa-solid fa-right-left mr-0.5"></i>{m.swappedBy.map(nameOf).join('、')}</div>
                                   : <div className="text-slate-500">未被換過</div>}
@@ -5487,33 +5708,33 @@
                         })}
                       </div>
 
-                      <p className="text-[9px] text-slate-400 mt-2 leading-snug">
+                      <p className="text-[11px] text-slate-400 mt-3 leading-snug">
                         <i className="fa-solid fa-right-left text-rose-300 mr-0.5"></i>換過（拿一還一）。「舊資訊」＝你看過的暗牌，之後有人動過，內容未必還是原本那張。
                       </p>
                       {watchLog.length > 0 && (
-                        <div className="mt-1.5 space-y-0.5">
+                        <div className="mt-2 space-y-0.5">
                           {watchLog.map(w => (
-                            <p key={w.id} className="text-[9px] text-sky-300 leading-snug"><i className="fa-solid fa-binoculars mr-0.5"></i>守夜人：{nameOf(w.pid)} 看過 3 張、換過 1 張（不知哪一格，順序已洗）</p>
+                            <p key={w.id} className="text-[11px] text-sky-300 leading-snug"><i className="fa-solid fa-binoculars mr-0.5"></i>守夜人：{nameOf(w.pid)} 看過 3 張、換過 1 張（不知哪一格，順序已洗）</p>
                           ))}
                         </div>
                       )}
                       {visibleWatchNote && visibleWatchNote.text && (
-                        <p className={`text-[9px] mt-1 leading-snug ${visibleWatchNote.stale ? 'text-slate-500' : 'text-cyan-300'}`}>
+                        <p className={`text-[11px] mt-1.5 leading-snug ${visibleWatchNote.stale ? 'text-slate-500' : 'text-cyan-300'}`}>
                           <i className="fa-solid fa-binoculars mr-0.5"></i>{visibleWatchNote.text}{visibleWatchNote.stale ? '（舊資訊）' : ''}
                         </p>
                       )}
 
                       {centerPickMode ? (
-                        <div className="flex space-x-2 mt-3">
-                          <button disabled={pickSlot === null} onClick={() => confirmTakeCenter(pickSlot)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-bold py-2 rounded-xl">
+                        <div className="flex space-x-2 mt-4">
+                          <button disabled={pickSlot === null} onClick={() => confirmTakeCenter(pickSlot)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-bold py-2.5 rounded-xl">
                             {pickSlot !== null ? `拿取暗牌 ${pickSlot + 1}` : '請先選一格暗牌'}
                           </button>
-                          <button onClick={closeCenterModal} className="bg-slate-800 text-slate-300 text-xs px-3 py-2 rounded-xl border border-slate-700">取消</button>
+                          <button onClick={closeCenterModal} className="bg-slate-800 text-slate-300 text-sm px-4 py-2.5 rounded-xl border border-slate-700">取消</button>
                         </div>
                       ) : (
                         <>
                           <div className="h-3"></div>
-                          <button onClick={closeCenterModal} className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs py-2 rounded-xl border border-slate-700 transition">
+                          <button onClick={closeCenterModal} className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 text-sm font-bold py-2.5 rounded-xl border border-slate-700 transition">
                             關閉
                           </button>
                         </>
@@ -5628,7 +5849,7 @@
           const watchmanOptions = [...centerCards, ...watchmanHand].filter(Boolean);
 
           return (
-            <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
               <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl w-full max-w-xs p-4 shadow-2xl relative">
                 <h3 className="text-sm font-bold text-emerald-300 border-b border-slate-800 pb-2 mb-3">
                   {modal.title || ('選擇【' + (modal.card ? modal.card.title : '能力') + '】目標')}

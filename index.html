@@ -142,6 +142,30 @@
         @keyframes fxDrawGlow { 0%, 100% { box-shadow: 0 0 0 rgba(251,191,36,0); } 40%, 75% { box-shadow: 0 0 22px 4px rgba(251,191,36,.75); } }
         @keyframes fxBarGrow { 0% { width: 0; } 100% { width: var(--w); } }
         @keyframes fxWinGlow { 0% { box-shadow: 0 0 0 0 rgba(251,191,36,0); } 100% { box-shadow: 0 0 14px 2px rgba(251,191,36,.85); border-color: #fbbf24; background-color: rgba(120,53,15,.55); } }
+        @keyframes matchMoonIn {
+          0% { opacity: 0; transform: translateY(40px) scale(.4) rotate(-20deg); }
+          55% { opacity: 1; transform: translateY(-6px) scale(1.15) rotate(4deg); }
+          100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+        }
+        @keyframes matchCrownDrop {
+          0% { opacity: 0; transform: translateY(-80px) scale(1.6) rotate(-12deg); }
+          70% { opacity: 1; transform: translateY(6px) scale(.95) rotate(3deg); }
+          100% { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+        }
+        @keyframes matchTitleIn {
+          0% { opacity: 0; letter-spacing: .55em; filter: blur(8px); transform: scale(1.4); }
+          100% { opacity: 1; letter-spacing: .12em; filter: blur(0); transform: scale(1); }
+        }
+        @keyframes matchBurst {
+          0% { opacity: 0; transform: scale(.2); }
+          40% { opacity: .9; }
+          100% { opacity: 0; transform: scale(2.4); }
+        }
+        @keyframes matchRing {
+          0% { opacity: 0; transform: scale(.6); }
+          50% { opacity: 1; }
+          100% { opacity: .35; transform: scale(1.25); }
+        }
         @keyframes fxDim { 0% { opacity: 1; } 100% { opacity: .38; } }
         @keyframes btnBlinkG { 0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); border-color: rgba(16,185,129,.4); } 50% { box-shadow: 0 0 14px 3px rgba(52,211,153,.85); border-color: #6ee7b7; } }
         @keyframes btnBlinkB { 0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0); border-color: rgba(59,130,246,.4); } 50% { box-shadow: 0 0 14px 3px rgba(96,165,250,.85); border-color: #93c5fd; } }
@@ -284,7 +308,7 @@
           '守夜人': 'watch', '保鏢': 'shield', '賞金獵人': 'bounty', '掘墓人': 'grave', '女巫': 'witch',
           '市長': 'selfout', '狼人': 'selfout',
         };
-        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2800, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3600, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, alchemist: 3600, wolfbite: 4300, vampire: 6500 };
+        const FX_DURATION = { moon: 3200, guess: 2700, ask: 2500, peek: 2800, compare: 7000, swap: 2700, drunk: 4000, watch: 2700, takeone: 2700, shield: 2100, bounty: 2800, grave: 3600, witch: 2500, selfout: 2100, plain: 2200, none: 1600, place: 3200, servant: 3200, alchemist: 3600, wolfbite: 4300, vampire: 6500, match: 7200 };
         // 被動牌打出時「沒有任何效果（原因）」的原因（動態廣播、行動紀錄、置於面前動畫共用）
         const PASSIVE_WHY = {
           '乞丐之王': '結算時才發動',
@@ -299,7 +323,7 @@
         const fxHold = (f) => (f && f.kind === 'place' ? 2000 : (f && f.kind === 'moon' ? 800 : 1000));
         const FX_SHOW_NONE = false; // 「無效果」小標籤動畫：目前關閉（程式保留，改 true 即恢復）
         const FX_TOTAL = 4000; // 效果動畫總長（毫秒）；內部各步驟依 baseDur 等比放慢
-        const FX_TOTAL_BY = { compare: 7000, grave: 4800, peek: 3600, place: 4000, servant: 4000, alchemist: 4200, drunk: 5000, wolfbite: 4300, vampire: 6500 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
+        const FX_TOTAL_BY = { compare: 7000, grave: 4800, peek: 3600, place: 4000, servant: 4000, alchemist: 4200, drunk: 5000, wolfbite: 4300, vampire: 6500, match: 7200 }; // 個別動畫的總長（沒列出的用 FX_TOTAL）
         const FX_STAMP_TEXT = { out: '淘汰', fail: '✘ 失敗', nofx: '✘ 無效', revive: '復活', spy: '間諜反殺', tie: '平手' };
         const FX_STAMP_CLS = {
           out: 'text-rose-400 border-rose-400', fail: 'text-slate-200 border-slate-400', nofx: 'text-slate-300 border-slate-500',
@@ -544,18 +568,25 @@
         // 由低到高逐一翻牌，最後兩位之間多停頓，再亮出勝者。時間單位＝秒（baseDur／duration 為毫秒）
         function buildScoreFx(entries, mode, winnerIds, winText) {
           const n = entries.length;
+          // 一般結算：由低到高翻牌；乞丐之王：先翻完所有手牌，最後才揭示「乞丐之王獲勝」
           const order = entries.map((e, i) => ({ i, f: e.final })).sort((a, b) => a.f - b.f || a.i - b.i);
           const t0 = 1.3, step = 1.1;
           const rows = entries.map((e, i) => {
             const k = order.findIndex(o => o.i === i);
             const t = t0 + k * step + (n > 1 && k === n - 1 ? 0.9 : 0);
-            return { ...e, t, win: winnerIds.includes(e.p.id) };
+            return { ...e, t, win: mode === 'beggar' ? false : winnerIds.includes(e.p.id), winLate: winnerIds.includes(e.p.id) };
           });
-          const tLast = Math.max(...rows.map(r => r.t));
+          const tLast = Math.max(...rows.map(r => r.t), t0);
           const anyMods = rows.some(r => r.mods && r.mods.length);
-          const tWin = tLast + (anyMods ? 1.7 : 1.0);
-          const total = Math.round((tWin + 1.8) * 1000);
-          return { key: `${Date.now()}-${Math.random()}`, kind: 'score', mode, rows, tWin, winText, maxV: Math.max(12, ...rows.map(r => r.final)), card: null, src: null, tgt: null, tone: 'ok', baseDur: total, duration: total };
+          const tWin = mode === 'beggar' ? tLast + (anyMods ? 2.4 : 2.0) : tLast + (anyMods ? 1.7 : 1.0);
+          const holdEnd = mode === 'beggar' ? 2.6 : 1.8;
+          const total = Math.round((tWin + holdEnd) * 1000);
+          return {
+            key: `${Date.now()}-${Math.random()}`, kind: 'score', mode, rows, tWin, winText,
+            winnerIds: winnerIds || [],
+            maxV: Math.max(12, ...rows.map(r => r.final)),
+            card: null, src: null, tgt: null, tone: 'ok', baseDur: total, duration: total,
+          };
         }
 
         function Avatar({ p, size = 'w-11 h-11', glow = '' }) {
@@ -635,7 +666,7 @@
 
         function FxOverlay({ fx, onSkip, replay, localPlayerId = 0 }) {
           const { kind, card, src, tgt } = fx;
-          const full = kind === 'moon' || kind === 'wolfbite' || kind === 'vampire' || kind === 'score';
+          const full = kind === 'moon' || kind === 'wolfbite' || kind === 'vampire' || kind === 'score' || kind === 'match';
           
           // 若是全屏動畫，我們希望它能蓋過整個畫面（包含 A 區頂部），因此使用 fixed 絕對定位與最高 z-index
           const fullStyle = full ? "fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-sm flex items-center justify-center pointer-events-auto" : "absolute inset-0 z-40 flex items-center justify-center pointer-events-none";
@@ -655,7 +686,7 @@
           }, [fx.key, fx.duration, full, replay]);
           React.useEffect(() => {
             // 終局動畫（比點／狼月／吸血鬼／第3月亮）：不自動關閉，只能播完後點擊繼續
-            const isFinaleFx = fx.kind === 'score' || fx.kind === 'wolfbite' || fx.kind === 'vampire'
+            const isFinaleFx = fx.kind === 'score' || fx.kind === 'wolfbite' || fx.kind === 'vampire' || fx.kind === 'match'
               || (fx.kind === 'moon' && (Number(fx.phase) >= 3 || fx.wolf === 'held'));
             if (replay || isFinaleFx) return;
             // 安全網：一般動畫若一直不點，duration+15s 後強制關閉，避免永久卡死
@@ -941,7 +972,7 @@
                   const pct = Math.max(4, Math.round(r.final / fx.maxV * 100));
                   return (
                     <div key={r.p.id} style={an('fxPop', 0.35, 0.2 + k * 0.08)}>
-                      <div className="relative flex items-center gap-1.5 px-1.5 py-0.5 rounded-lg bg-slate-900/70 border border-slate-700/60" style={r.win ? { animation: `fxWinGlow .6s ease-out ${tWin}s both` } : { animation: `fxDim .5s linear ${tWin}s both` }}>
+                      <div className="relative flex items-center gap-1.5 px-1.5 py-0.5 rounded-lg bg-slate-900/70 border border-slate-700/60" style={(r.win || (fx.mode === 'beggar' && r.winLate)) ? { animation: `fxWinGlow .6s ease-out ${tWin}s both` } : (fx.mode === 'beggar' ? { animation: `fxDim .5s linear ${tWin + 0.35}s both` } : { animation: `fxDim .5s linear ${tWin}s both` })}>
                         <Avatar p={r.p} size="w-6 h-6 text-xs" />
                         <span className={`w-12 truncate text-[10px] font-black ${r.p.id === localPlayerId ? 'text-sky-300' : 'text-slate-100'}`}>{r.p.name}</span>
                         <div className="relative w-10 h-[44px] shrink-0">
@@ -960,12 +991,64 @@
                           <span className="absolute inset-0 flex items-center justify-end" style={hasM ? { animation: `fxPop .3s ease-out ${dBase}s both, fxOut .2s linear ${r.t + 0.95}s forwards` } : an('fxPop', 0.3, dBase)}>{r.base}</span>
                           {hasM && <span className="absolute inset-0 flex items-center justify-end" style={an('fxPop', 0.35, r.t + 1.0)}>{r.final}</span>}
                         </div>
-                        {r.win && <span className="absolute -top-2 -right-1 text-sm" style={an('fxPop', 0.4, tWin + 0.1)}>👑</span>}
+                        {(r.win || (fx.mode === 'beggar' && r.winLate)) && (
+                          <span className="absolute -top-2 -right-1 text-sm" style={an('fxPop', 0.4, tWin + 0.15)}>👑</span>
+                        )}
                       </div>
                     </div>
                   );
                 })}
-                <div className="mt-1 text-center text-sm font-black text-amber-300" style={an('fxPop', 0.5, tWin + 0.2)}>{fx.winText}</div>
+                {fx.mode === 'beggar' && (
+                  <div className="mt-2 flex flex-col items-center gap-1" style={an('fxPop', 0.45, tWin)}>
+                    <div
+                      className="px-3 py-1 rounded-md border-[3px] border-amber-400 text-amber-300 font-black text-base tracking-widest bg-slate-950/80"
+                      style={an('fxStamp', 0.4, tWin)}
+                    >乞丐之王發動</div>
+                    <div className="text-[10px] text-slate-400 font-bold" style={an('fxFadeUp', 0.35, tWin + 0.25)}>最終點數作廢・獨享勝利</div>
+                  </div>
+                )}
+                <div className="mt-1 text-center text-sm font-black text-amber-300" style={an('fxPop', 0.5, tWin + (fx.mode === 'beggar' ? 0.55 : 0.2))}>{fx.winText}</div>
+              </div>
+            );
+          } else if (kind === 'match') {
+            const winners = Array.isArray(fx.matchWinners) ? fx.matchWinners : [];
+            const need = fx.winsNeeded || 2;
+            body = (
+              <div className="w-[min(360px,94vw)] flex flex-col items-center gap-3 px-2">
+                <div className="relative w-28 h-28 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border-2 border-amber-400/50" style={an('matchRing', 2.2, 0.2, 'ease-out')}></div>
+                  <div className="absolute inset-[-10px] rounded-full border border-amber-300/20" style={an('matchBurst', 1.6, 1.2, 'ease-out')}></div>
+                  <i className="fa-solid fa-crown text-5xl text-amber-300 drop-shadow-[0_0_18px_rgba(251,191,36,.9)]" style={an('matchCrownDrop', 0.7, 0.15)}></i>
+                </div>
+                <div className="text-center" style={an('matchTitleIn', 0.8, 0.5)}>
+                  <div className="text-[11px] font-black text-amber-200/90 tracking-widest mb-1">月亮標記集滿</div>
+                  <div className="text-xl font-black text-amber-300 tracking-wide">贏得整場</div>
+                </div>
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  {Array.from({ length: need }).map((_, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center justify-center w-11 h-11 rounded-full bg-slate-900 border-2 border-amber-400 text-amber-300 text-xl shadow-[0_0_14px_rgba(251,191,36,.55)]"
+                      style={{ animation: `matchMoonIn .55s cubic-bezier(.2,.9,.3,1.2) ${0.9 + i * 0.35}s both` }}
+                    >
+                      <i className="fa-solid fa-moon"></i>
+                    </span>
+                  ))}
+                </div>
+                <div className="w-full flex flex-col items-center gap-2 mt-1" style={an('fxFadeUp', 0.45, 1.6 + need * 0.15)}>
+                  {winners.map((w, wi) => (
+                    <div key={wi} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/50">
+                      {w.p && <Avatar p={w.p} size="w-9 h-9 text-base" glow="shadow-[0_0_12px_rgba(251,191,36,.7)]" />}
+                      <div className="text-left">
+                        <div className="text-sm font-black text-amber-200">{w.name}</div>
+                        <div className="text-[10px] font-bold text-amber-400/90"><i className="fa-solid fa-moon mr-0.5"></i>×{need} 勝場月亮</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[11px] font-black text-slate-300 tracking-wide mt-1" style={an('fxPop', 0.4, 2.4 + need * 0.1)}>
+                  新的一場即將開始・月亮標記將重置
+                </div>
               </div>
             );
           } else if (kind === 'takeone') {
@@ -1487,7 +1570,7 @@
         };
 
         function App() {
-          const [version] = useState('v0.0.17');
+          const [version] = useState('v0.0.18');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => safeStorageGet('wolfmoon.displayName') || '');
           const [firebaseUser, setFirebaseUser] = useState(null);
@@ -1888,6 +1971,7 @@
           const aiRunRef = useRef(0);
           const winsRef = useRef({});
           const lastRoundWinnerIdsRef = useRef([]); // 上一局獲勝者 id，下一局先手
+          const clearWinsNextRef = useRef(false); // 整場結束後下一局須清空月亮標記
           const takenCardRef = useRef(null);
           const takenSlotRef = useRef(null);
           // 需選目標／確認的牌：C 區展示延到按確認後才 push，避免預先露出手牌
@@ -2045,7 +2129,7 @@
             let cancelled = false;
             const gameOverAt = Date.now();
             const isFinale = (f) => !!(f && (
-              f.kind === 'wolfbite' || f.kind === 'vampire' || f.kind === 'score' ||
+              f.kind === 'wolfbite' || f.kind === 'vampire' || f.kind === 'score' || f.kind === 'match' ||
               (f.kind === 'moon' && (Number(f.phase) >= 3 || f.wolf === 'held'))
             ));
             // 佇列瘦身：保留終局動畫＋最後一筆（致命一擊）；不再清掉「正在播」的動畫
@@ -2062,7 +2146,7 @@
               fxShownRef.current = false;
               setFx(null);
             };
-            const expectScoreKey = (winnerInfo && winnerInfo.scores && winnerInfo.scores.fxKey) || null;
+            const expectScoreKey = (winnerInfo && ((winnerInfo.scores && winnerInfo.scores.fxKey) || winnerInfo.matchFxKey)) || null;
             const tryReady = () => {
               if (cancelled) return;
               const now = Date.now();
@@ -2163,7 +2247,7 @@
           };
           useEffect(() => {
             if (!replay || !replay.fx) return;
-            if (['moon', 'wolfbite', 'vampire'].includes(replay.fx.kind)) return; // 全屏動畫回放：播完停住，點一下離開
+            if (['moon', 'wolfbite', 'vampire', 'score', 'match'].includes(replay.fx.kind)) return; // 全屏動畫回放：播完停住，點一下離開
             const t = setTimeout(() => closeReplay(), (replay.fx.duration || 4000) + fxHold(replay.fx) + 500);
             return () => clearTimeout(t);
           }, [replay]);
@@ -2197,7 +2281,7 @@
               const done = fxCurRef.current;
               // 終局動畫（比點／狼月／吸血鬼／第3月亮）點擊後記入，勝利視窗才可出現
               if (done && done.key && (
-                done.kind === 'score' || done.kind === 'wolfbite' || done.kind === 'vampire' ||
+                done.kind === 'score' || done.kind === 'wolfbite' || done.kind === 'vampire' || done.kind === 'match' ||
                 (done.kind === 'moon' && (Number(done.phase) >= 3 || done.wolf === 'held'))
               )) {
                 scoreDoneKeysRef.current.add(done.key);
@@ -2522,6 +2606,12 @@
             takenSlotRef.current = null;
             setPlayerHands(hands);
             setPlayers(roster.map(p => ({ ...p, status: '存活', protected: false, playedCards: [], witchRevived: false, handTaken: false })));
+            // 整場結束後開新的一場：重置所有月亮標記
+            if (clearWinsNextRef.current) {
+              clearWinsNextRef.current = false;
+              winsRef.current = {};
+              setWins({});
+            }
             // 上一局勝利玩家先出牌（多人共同獲勝時取名單中第一位仍在本局 roster 者）
             const prevWinners = (lastRoundWinnerIdsRef.current || []).filter(id => roster.some(p => p.id === id));
             let startTurn = 0;
@@ -3014,7 +3104,7 @@
               // 淘汰動畫也要顯示該玩家公開展示的手牌（只附在與此人有關的那筆動畫上；比大小動畫本來就會翻開輸家的牌）
               const metaOf = (t) => [...BASE_CARDS_DEF, WEREWOLF_CARD].find(m => m.title === t);
               const revealEntry = { p: target, cards: targetHand.map(c => ({ title: c.title, value: c.value, icon: c.icon || (metaOf(c.title) || {}).icon })) };
-              const attachReveal = (f) => (f && f.kind !== 'compare' && f.kind !== 'moon' && f.kind !== 'wolfbite' && f.kind !== 'score' && f.kind !== 'place' && f.kind !== 'servant' && f.kind !== 'takeone'
+              const attachReveal = (f) => (f && f.kind !== 'compare' && f.kind !== 'moon' && f.kind !== 'wolfbite' && f.kind !== 'score' && f.kind !== 'match' && f.kind !== 'place' && f.kind !== 'servant' && f.kind !== 'takeone'
                 && ((f.tgt && f.tgt.id === targetId) || (f.src && f.src.id === targetId))
                 && !(f.reveals || []).some(r => r.p.id === targetId))
                 ? { ...f, reveals: [...(f.reveals || []), revealEntry] } : f;
@@ -3139,9 +3229,35 @@
             [...new Set(winnerIds)].forEach(id => { nextWins[id] = (nextWins[id] || 0) + 1; });
             winsRef.current = nextWins;
             setWins(nextWins);
-            const matchWinners = [...new Set(winnerIds)].filter(id => nextWins[id] >= winsNeeded).map(id => (st.players.find(p => p.id === id) || {}).name);
+            const matchWinnerIds = [...new Set(winnerIds)].filter(id => nextWins[id] >= winsNeeded);
+            const matchWinners = matchWinnerIds.map(id => (st.players.find(p => p.id === id) || {}).name).filter(Boolean);
             const scoreRows = scores && scores.rows ? scores.rows.map(r => ({ ...r, win: winnerIds.includes(r.id) })) : null;
-            setWinnerInfo({ winnerName: winnerText, reason, matchWinners, winnerIds: [...new Set(winnerIds)], winsNeeded, scores: scoreRows ? { title: scores.title, rows: scoreRows, fxKey: (scores.fx && scores.fx.key) || null } : null });
+            let matchFxKey = null;
+            if (matchWinnerIds.length > 0) {
+              clearWinsNextRef.current = true;
+              const matchFx = {
+                key: `${Date.now()}-${Math.random()}`,
+                kind: 'match',
+                card: null, src: null, tgt: null, tone: 'ok',
+                winsNeeded,
+                matchWinners: matchWinnerIds.map(id => {
+                  const p = st.players.find(x => x.id === id);
+                  return { id, name: (p && p.name) || '?', p: p || null };
+                }),
+                baseDur: (typeof FX_DURATION !== 'undefined' && FX_DURATION.match) || 7200,
+                duration: (typeof FX_TOTAL_BY !== 'undefined' && FX_TOTAL_BY.match) || 7200,
+              };
+              matchFxKey = matchFx.key;
+              startFx(matchFx);
+            }
+            setWinnerInfo({
+              winnerName: winnerText, reason, matchWinners, winnerIds: [...new Set(winnerIds)], winsNeeded,
+              matchFxKey,
+              // 勝利視窗等「最後一段」終局動畫：有整場勝出動畫則等 match，否則等比點／狼月等
+              scores: scoreRows
+                ? { title: scores.title, rows: scoreRows, fxKey: matchFxKey || (scores.fx && scores.fx.key) || null }
+                : (matchFxKey ? { title: '', rows: [], fxKey: matchFxKey } : null),
+            });
             setBroadcastAction(`遊戲結束！【${winnerText}】獲勝`);
             setBroadcastResult(`➔ ${reason}`);
             setHistoryLogs(prev => [{ id: `${Date.now()}-${Math.random()}`, player: '系統', action: `遊戲結束！【${winnerText}】獲勝`, result: reason, reveal: '', event: null, card: `遊戲結束！【${winnerText}】獲勝 ➔ ${reason}` }, ...prev]);
@@ -4521,6 +4637,7 @@
             // 本機試玩：一人即開始
             if (!onlineSession || !roomData || !firebaseUser || !roomRef.current) {
               if (winnerInfo && winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) {
+                clearWinsNextRef.current = true;
                 winsRef.current = {};
                 setWins({});
               }
@@ -4589,6 +4706,7 @@
                 if (result.committed) {
                   const after = result.snapshot && result.snapshot.val();
                   if (after && !after.gameState && winnerInfo && winnerInfo.matchWinners && winnerInfo.matchWinners.length > 0) {
+                    clearWinsNextRef.current = true;
                     winsRef.current = {};
                     setWins({});
                   }
@@ -4938,7 +5056,7 @@
                       >
                         {(() => {
                           const activeN = getFrontCards(player).filter(c => isCardActive(player, c)).length;
-                          const winN = Math.min(wins[player.id] || 0, 2);
+                          const winN = Math.min(wins[player.id] || 0, 3);
                           return (
                             <div className="w-full h-[10px] shrink-0 flex flex-nowrap items-center justify-center gap-[2px] overflow-hidden whitespace-nowrap text-[7px] leading-none font-bold">
                               {winN > 0 && <span className="flex items-center gap-px text-amber-300">{Array.from({ length: winN }).map((_, i) => <i key={i} className="fa-solid fa-moon"></i>)}</span>}
@@ -5185,7 +5303,7 @@
                     const isDead = me.status === '出局';
                     const fronts = getFrontCards(me);
                     const activeN = fronts.filter(c => isCardActive(me, c)).length;
-                    const winN = Math.min(wins[me.id] || 0, 2);
+                    const winN = Math.min(wins[me.id] || 0, 3);
                     return (
                       <div
                         className={`absolute left-1.5 top-1.5 z-20 flex items-center gap-1.5 rounded-lg px-1.5 py-1 bg-slate-800/90 border transition-all ${
