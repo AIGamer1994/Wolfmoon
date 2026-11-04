@@ -1,6 +1,6 @@
 # 狼月 Wolf Moon — README
 
-> **版本**：`v0.0.0`（M＝Mobile 手機優先；線上多人版，保留本機試玩）
+> **版本**：`v0.0.1`（M＝Mobile 手機優先；線上多人版，保留本機試玩）
 > **類型**：3–6 人線上卡牌遊戲 / 手機優先 UI
 > **技術棧**：React 18（CDN）+ Babel Standalone + Tailwind CSS（CDN）+ FontAwesome + Firebase Auth / Realtime Database
 > **語言**：繁體中文
@@ -82,7 +82,8 @@
 - 牌庫建立、洗牌、抽牌、月亮牌補充。
 - 手牌、面前牌區（arena）、出局狀態追蹤。
 - 回合切換與存活玩家輪轉。
-- **換人序號 `turnSeq`**：每次 `proceedToNext` 換人時遞增（`turnSeqRef`），並隨快照寫入 `gameState.turnSeq`。接收快照時，若「我是該快照當前行動者的權威」（本人輪到、或房主且輪到 AI）且快照 `turnSeq` ≤ 本機 `turnSeqRef`，視為舊快照，只跟上 revision、不套用狀態；否則正常套用並同步 `turnSeqRef`。**不可再用 `currentTurnIndex` 大小比較新舊**（座位序號繞回 0 時會誤判，造成下一位真人收不到回合而卡死，或舊快照被套用而多出額外回合）。新局時 `turnSeqRef` 歸零；本機尚無牌局（`players` 為空）時一律套用快照。
+- **換人序號 `turnSeq`**：每次 `proceedToNext` 換人時遞增（`turnSeqRef`），並隨快照寫入 `gameState.turnSeq`。接收快照時，僅在「本機仍握有行動權」（本人真人回合，或房主且本機當前為 AI 回合）且遠端 `turnSeq` 較舊、或同序但 `sourceUid` 非本人時，才跳過套用、只跟上 revision；**AI 回合以房主快照為準**，Guest 不得因本機序號較大而拒絕房主的月亮／復活連鎖。**不可再用 `currentTurnIndex` 大小比較新舊**（座位序號繞回 0 時會誤判）。新局時 `turnSeqRef` 歸零；本機尚無牌局（`players` 為空）時一律套用快照。
+- **發布權限（單一權威）**：房主恆可寫入 `gameState`；Guest 僅在「當前行動者為自己且非 AI」時可寫入。已移除以 `lastActorUid` 在換人後繼續發布的路徑，避免 Guest 獨跑 AI／月亮／煉金術士連鎖造成分叉。
 - **revision 同步**：`gameState.revision` 遞增；新局 `gameState = null` 時非房主重置 revision 並清空桌面狀態（手牌、牌庫、中央暗牌、C 區等），且禁止把上局狀態寫回 RTDB；房主負責 `initGame` 並寫入新狀態。線上尚未收到牌局時顯示「正在同步牌局…」，不誤顯上局手牌。
 
 ---
@@ -236,6 +237,7 @@ database.rules.json   # Firebase RTDB 規則（含 nextReady）
 
 | 版本 | 重點 |
 |------|------|
+| v0.0.1 | 修正 Host／Guest 分叉（卡在扒手、Guest 獨跑月亮 3/3 與煉金術士復活）：① 發布權限改為「房主恆可寫；Guest 僅在輪到自己的真人回合可寫」，移除 `lastActorUid` 換人後仍可寫入的漏洞；② 套用遠端快照時，僅在「本機仍握有行動權」且遠端 `turnSeq` 較舊／同序但非本人寫入時才跳過，AI 回合一律以房主快照為準，避免 Guest 拒絕房主的月亮／復活連鎖更新 |
 | v0.0.0（修正） | 修正「出牌後偶爾無法換人」：① AI 額外回合（僕人／小偷）時 `currentTurnIndex` 不變導致 AI 不再行動 ➔ AI 驅動 effect 加入 `aiKick`（只在 `proceedToNext` 遞增），`stale()` 另比對 `turnSeq`；② 線上發布 RTDB 快照改為單一 transaction 在飛（`publishInFlightRef`），期間有新狀態以 dirty 旗標補發，transaction 因 revision 不符被中止時最多重試 8 次（250ms），避免最後一份換人快照遺失、下一位收不到回合 |
 | v0.0.0（修正） | ① 最終結算動畫不可被自動／提前關閉，播完點擊才繼續，各玩家獨立；② 修正未全員準備就跳下一局（需 gameOver、清殘留旗標） |
 | v0.0.0（修正） | 修正線上換人同步：以 `turnSeq` 取代 `currentTurnIndex` 比較，解決殺人後多出額外回合、村民／煉金術士後回合無法交給下一位真人（卡死）、座位序號繞圈時誤判快照新舊 |

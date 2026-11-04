@@ -1370,7 +1370,7 @@
         };
 
         function App() {
-          const [version] = useState('v0.0.0');
+          const [version] = useState('v0.0.1');
           const [screen, setScreen] = useState('home');
           const [displayName, setDisplayName] = useState(() => safeStorageGet('wolfmoon.displayName') || '');
           const [firebaseUser, setFirebaseUser] = useState(null);
@@ -2453,17 +2453,32 @@
             // 這段期間別人（例如房主）發來的同一回合快照一律不套用，只跟上 revision，
             // 避免出牌後的小偷額外回合、醉漢重發被舊快照蓋掉；並強制重發本機狀態。
             {
+              // 回合權威：只有「本機目前仍握有行動權」時才擋別人同回合的快照。
+              // AI 回合一律以房主為正本——Guest 不得因本機 turnSeq 較大而拒絕房主的 AI／月亮／復活連鎖更新。
               const stLocal = stateRef.current;
-              const incomingPlayers = Array.isArray(snapshot.players) ? snapshot.players : Object.values(snapshot.players || {});
-              const actorInSnap = incomingPlayers[snapshot.currentTurnIndex];
-              const iWasAuthorityOfSnap = !!actorInSnap && (actorInSnap.isAI ? (roomData && roomData.hostUid === firebaseUser.uid) : actorInSnap.uid === firebaseUser.uid);
-              
-              if (iWasAuthorityOfSnap && (stLocal.players || []).length > 0 && (snapshot.turnSeq || 0) <= turnSeqRef.current) {
-                // 如果快照的 revision 較新，我們跟上 revision 但不套用其狀態
-                gameRevisionRef.current = snapshot.revision;
-                lockRef.current = false; // 即使跳過套用，也要確保解鎖
-                setSyncTick(t => t + 1);
-                return;
+              const hostOwns = !!(roomData && roomData.hostUid === firebaseUser.uid);
+              const localPlayers = stLocal.players || [];
+              const localActor = localPlayers[stLocal.currentTurnIndex];
+              const iOwnLocalTurn = !!localActor && (
+                localActor.isAI
+                  ? hostOwns
+                  : localActor.uid === firebaseUser.uid
+              );
+              const snapSeq = snapshot.turnSeq || 0;
+              const localSeq = turnSeqRef.current || 0;
+              if (iOwnLocalTurn && localPlayers.length > 0) {
+                if (snapSeq < localSeq) {
+                  gameRevisionRef.current = snapshot.revision;
+                  lockRef.current = false;
+                  setSyncTick(t => t + 1);
+                  return;
+                }
+                if (snapSeq === localSeq && snapshot.sourceUid && snapshot.sourceUid !== firebaseUser.uid) {
+                  gameRevisionRef.current = snapshot.revision;
+                  lockRef.current = false;
+                  setSyncTick(t => t + 1);
+                  return;
+                }
               }
             }
             const incomingPlayers = Array.isArray(snapshot.players)
@@ -2560,7 +2575,9 @@
             const actor = players[currentTurnIndex];
             const actorUid = actor?.uid || null;
             const seqNow = turnSeqRef.current;
-            const mayPublish = hostOwnsRoom || actorUid === firebaseUser.uid || lastActorUidRef.current === firebaseUser.uid;
+            // 單一權威：AI／全局連鎖（月亮、煉金術士復活等）只由房主寫入；
+            // Guest 僅在「輪到自己的真人回合」時可發布，不可靠 lastActorUid 在換人後繼續寫入（避免分叉）。
+            const mayPublish = hostOwnsRoom || (!!actor && !actor.isAI && actorUid === firebaseUser.uid);
             if (!mayPublish) return;
             if (gameSyncTimerRef.current) clearTimeout(gameSyncTimerRef.current);
             gameSyncTimerRef.current = setTimeout(async () => {
